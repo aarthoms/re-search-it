@@ -7,6 +7,7 @@ class PaperState(TypedDict, total=False):
     query: str
     is_direct_id: bool
     arxiv_id: str
+    search_terms: list[str]
     candidates: list[dict]
     selected_paper: dict
     parsed_sections: dict[str, str]
