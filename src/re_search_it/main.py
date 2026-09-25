@@ -1,8 +1,6 @@
-"""Interactive CLI: query -> retrieval graph -> ranked/selected paper.
+"""Interactive CLI: query -> retrieval -> parse/chunk/embed -> briefing.
 
-Only the retrieval stage is wired so far (query understanding, arXiv fetch,
-selection ranking). Parsing, chunking/embedding, summarizing, and QA land in
-later build steps.
+The QA loop is not wired yet -- that's the next build step.
 """
 
 import sys
@@ -54,6 +52,23 @@ def _print_parse_summary(result: dict) -> None:
         return
     print(f"\nParsed sections ({len(sections)}): {', '.join(sections.keys())}")
     print(f"Chunked & embedded: {result.get('chunk_count', 0)} chunks -> {result['vector_collection_id']}")
+
+    _print_briefing(result.get("briefing"))
+
+
+def _print_briefing(briefing: dict | None) -> None:
+    if not briefing:
+        return
+    print("\n--- Executive Briefing ---")
+    print(f"TL;DR: {briefing['tldr']}")
+    print(f"\nProblem: {briefing['problem']}")
+    print(f"\nApproach: {briefing['approach']}")
+    print("\nKey findings:")
+    for f in briefing["key_findings"]:
+        print(f"  - {f}")
+    print("\nLimitations:")
+    for lim in briefing["limitations"]:
+        print(f"  - {lim}")
 
 
 def main() -> None:

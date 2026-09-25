@@ -1,8 +1,12 @@
-"""Cohere wrapper: query expansion (chat) and candidate reranking."""
+"""Cohere wrapper: query expansion (chat), candidate reranking, embedding, summarization."""
+
+import json
 
 import cohere
+from pydantic import ValidationError
 
 from re_search_it.config import COHERE_API_KEY
+from re_search_it.schemas import Briefing
 
 CHAT_MODEL = "command-a-03-2025"
 RERANK_MODEL = "rerank-v3.5"
@@ -93,3 +97,62 @@ def embed(texts: list[str], input_type: str = "search_document") -> list[list[fl
         vectors.extend(response.embeddings.float_)
 
     return vectors
+
+
+_BRIEFING_SCHEMA_HINT = """Respond with ONLY a JSON object matching this exact shape:
+{
+  "tldr": "1-2 sentence plain-language summary",
+  "problem": "what problem the paper addresses and why it matters",
+  "approach": "the core method/technique",
+  "key_findings": ["finding 1", "finding 2", "..."],
+  "limitations": ["limitation 1 the paper itself acknowledges", "..."]
+}
+key_findings and limitations must each contain at least one item. If the
+paper text doesn't explicitly state limitations, infer the most defensible
+ones from its scope (e.g. dataset size, domain, evaluation setup) rather
+than leaving the list empty."""
+
+_SUMMARIZE_PROMPT = """Write a structured executive briefing for this paper.
+
+Title: {title}
+Authors: {authors}
+
+Paper text (sections may be truncated):
+{sections_text}
+
+{schema_hint}"""
+
+MAX_SUMMARIZE_RETRIES = 2
+
+
+def summarize_paper(title: str, authors: list[str], sections_text: str) -> Briefing:
+    """Generate a validated Briefing for a paper. Retries on schema validation failure."""
+    prompt = _SUMMARIZE_PROMPT.format(
+        title=title,
+        authors=", ".join(authors),
+        sections_text=sections_text,
+        schema_hint=_BRIEFING_SCHEMA_HINT,
+    )
+    messages = [{"role": "user", "content": prompt}]
+
+    last_error: Exception | None = None
+    for _ in range(MAX_SUMMARIZE_RETRIES):
+        response = _client.chat(
+            model=CHAT_MODEL,
+            messages=messages,
+            response_format={"type": "json_object"},
+        )
+        text = response.message.content[0].text
+        try:
+            return Briefing.model_validate(json.loads(text))
+        except (json.JSONDecodeError, ValidationError) as exc:
+            last_error = exc
+            messages.append({"role": "assistant", "content": text})
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"That JSON was invalid: {exc}. Return corrected JSON only.",
+                }
+            )
+
+    raise ValueError(f"Failed to produce a valid briefing after retries: {last_error}")

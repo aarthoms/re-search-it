@@ -1,8 +1,8 @@
-"""LangGraph wiring for the retrieval stage: query understanding -> arXiv fetch -> ranking.
+"""LangGraph wiring: query understanding -> arXiv fetch -> ranking -> parse -> chunk/embed -> summarize.
 
 Direct-ID queries skip ranking (there's nothing to rank against). Topic queries
-are expanded, searched, and reranked. A zero-candidates/not-found result sets
-state["error"] and routes straight to END instead of crashing downstream nodes.
+are expanded, searched, and reranked. Any stage that sets state["error"] routes
+straight to END instead of letting downstream nodes crash on missing data.
 """
 
 from langgraph.graph import END, StateGraph
@@ -12,6 +12,7 @@ from re_search_it.nodes.chunk_embed import chunk_embed
 from re_search_it.nodes.fetch_parse import fetch_parse
 from re_search_it.nodes.query_understanding import query_understanding
 from re_search_it.nodes.selection_ranking import selection_ranking
+from re_search_it.nodes.summarize import summarize
 from re_search_it.state import PaperState
 
 
@@ -28,7 +29,7 @@ def _route_after_fetch_parse(state: PaperState) -> str:
 
 
 def _route_after_chunk_embed(state: PaperState) -> str:
-    return "failed" if state.get("error") else "done"
+    return "failed" if state.get("error") else "needs_summary"
 
 
 def build_retrieval_graph():
@@ -39,6 +40,7 @@ def build_retrieval_graph():
     graph.add_node("selection_ranking", selection_ranking)
     graph.add_node("fetch_parse", fetch_parse)
     graph.add_node("chunk_embed", chunk_embed)
+    graph.add_node("summarize", summarize)
 
     graph.set_entry_point("query_understanding")
     graph.add_edge("query_understanding", "arxiv_retrieval")
@@ -65,8 +67,9 @@ def build_retrieval_graph():
         _route_after_chunk_embed,
         {
             "failed": END,
-            "done": END,
+            "needs_summary": "summarize",
         },
     )
+    graph.add_edge("summarize", END)
 
     return graph.compile()
