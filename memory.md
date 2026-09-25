@@ -65,8 +65,12 @@ The system is built as an explicit stateful graph — a sequence of nodes operat
 Not yet started / in progress / complete — update as work proceeds.
 
 # Tools and Tech Stack 
-=> Cohere command-r-plus | Rerank-v3.5 | embed-v3 or embed-4
-=> Fallback (Gemini, will provide API key later)
-=> Lang-Graph 
+=> Cohere command-a-03-2025 (command-r-plus was deprecated by Cohere on 2025-09-15) | Rerank-v3.5 | embed-v3 or embed-4
+=> Fallback: Gemini via google-genai SDK (google-generativeai is deprecated upstream)
+=> Lang-Graph (chat model wired via langchain-cohere's ChatCohere)
 => ChromaDB as vectorDB
+
+## Verified
+
+- COHERE_API key confirmed working 2026-09-25, tested via raw `cohere` SDK (`ClientV2`) and via `langchain_cohere.ChatCohere`, both against `command-a-03-2025`.
 
