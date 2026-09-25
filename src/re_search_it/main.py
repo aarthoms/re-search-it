@@ -31,9 +31,14 @@ def _handle_query(graph, query: str) -> None:
         _print_paper(result["selected_paper"])
         return
 
-    print(f"\nSearch terms used: {', '.join(result.get('search_terms', []))}")
+    category = result.get("category")
+    print(f"\nSearch terms used: {', '.join(result.get('search_terms', []))}"
+          + (f" (category: {category})" if category else ""))
     print(f"Top match ({len(result['candidates'])} candidates considered):")
     _print_paper(result["selected_paper"])
+
+    if result.get("low_confidence"):
+        print("\n  ! Low-confidence match -- try rephrasing your query for better results.")
 
     others = result["candidates"][1:4]
     if others:

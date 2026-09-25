@@ -11,5 +11,10 @@ def query_understanding(state: PaperState) -> PaperState:
     if is_arxiv_id(query):
         return {**state, "is_direct_id": True, "arxiv_id": query}
 
-    search_terms = expand_query(query)
-    return {**state, "is_direct_id": False, "search_terms": search_terms}
+    expansion = expand_query(query)
+    return {
+        **state,
+        "is_direct_id": False,
+        "search_terms": expansion["terms"],
+        "category": expansion["category"],
+    }

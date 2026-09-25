@@ -3,6 +3,8 @@
 from re_search_it.state import PaperState
 from re_search_it.tools.cohere_client import rerank
 
+RELEVANCE_FLOOR = 0.3
+
 
 def selection_ranking(state: PaperState) -> PaperState:
     if state.get("is_direct_id"):
@@ -16,4 +18,10 @@ def selection_ranking(state: PaperState) -> PaperState:
     for candidate, r in zip(ranked_candidates, ranked):
         candidate["relevance_score"] = r["relevance_score"]
 
-    return {**state, "candidates": ranked_candidates, "selected_paper": ranked_candidates[0]}
+    top_score = ranked_candidates[0]["relevance_score"]
+    return {
+        **state,
+        "candidates": ranked_candidates,
+        "selected_paper": ranked_candidates[0],
+        "low_confidence": top_score < RELEVANCE_FLOOR,
+    }

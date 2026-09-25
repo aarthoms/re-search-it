@@ -8,8 +8,10 @@ class PaperState(TypedDict, total=False):
     is_direct_id: bool
     arxiv_id: str
     search_terms: list[str]
+    category: str | None
     candidates: list[dict]
     selected_paper: dict
+    low_confidence: bool
     parsed_sections: dict[str, str]
     vector_collection_id: str
     chunk_count: int
