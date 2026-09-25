@@ -1,12 +1,14 @@
-"""Interactive CLI: query -> retrieval -> parse/chunk/embed -> briefing -> chat loop.
+"""Interactive CLI: one loop, three operations, routed before any retrieval runs.
 
-The chat loop resolves each message's intent before touching retrieval:
-"new_paper" (the user named/implied a different paper -> switch and reset
-conversation state) vs. "follow_up" (a question about the currently loaded
-paper, with pronouns resolved against history). Without this split, a message
-like "what does 2301.12345 say?" gets answered from whatever paper happens to
-already be loaded -- a grounded-looking answer about the wrong paper, which is
-worse than an honest "I don't have that."
+Every message is classified into discovery (many papers on a topic), lookup
+(one specific paper), or qa (a question about the paper already loaded).
+Without this split up front, the system collapses "find me all papers on X"
+and "what does this paper say about X" into the same operation -- answering
+from whatever's already loaded, which is a routing bug, not a ranking one.
+
+Discovery deliberately stops at a ranked candidate list (see discovery.py) --
+it does not fetch/parse/chunk/embed every candidate, only whichever one the
+user picks via a follow-up lookup.
 """
 
 import itertools
@@ -17,10 +19,11 @@ import time
 
 from colorama import Fore, Style, init as colorama_init
 
+from re_search_it.discovery import discover_papers
 from re_search_it.graph import build_retrieval_graph
 from re_search_it.qa_graph import build_qa_graph
 from re_search_it.tools.arxiv_client import find_arxiv_id
-from re_search_it.tools.cohere_client import resolve_intent
+from re_search_it.tools.cohere_client import route_top_level
 
 colorama_init(autoreset=True)
 
@@ -43,6 +46,10 @@ _WAIT_MESSAGES = [
 ]
 
 RAW_LOG_WINDOW = 6
+PROMPT_HINT = (
+    "Ask a question, search for papers ('find all papers on X'), name a "
+    "specific paper, or 'new' to reset. 'exit' to quit."
+)
 
 
 def _c(color: str, text: str) -> str:
@@ -80,7 +87,7 @@ class _Spinner:
 
 
 class _ExitCLI(Exception):
-    """Raised to unwind out of the chat loop and quit the whole program."""
+    """Raised to unwind out of the loop and quit the whole program."""
 
 
 def _print_paper(paper: dict) -> None:
@@ -92,9 +99,10 @@ def _print_paper(paper: dict) -> None:
     print(f"  {_c(_DIM, paper['pdf_url'])}")
 
 
-def _handle_query(graph, query: str) -> dict | None:
-    with _Spinner("Searching arXiv..."):
-        result = graph.invoke({"query": query, "conversation_history": []})
+def _do_lookup(retrieval_graph, target: str) -> dict | None:
+    """Run the full single-paper pipeline (fetch/parse/chunk/embed/summarize)."""
+    with _Spinner("Fetching and indexing..."):
+        result = retrieval_graph.invoke({"query": target, "conversation_history": []})
 
     if result.get("error"):
         print(f"\n  {_c(_ERROR, '!')} {result['error']}")
@@ -118,10 +126,11 @@ def _handle_query(graph, query: str) -> dict | None:
 
         if result.get("low_confidence"):
             score = result["selected_paper"].get("relevance_score", 0)
-            print(
-                f"\n  {_c(_WARN, f'! This is a weak match (relevance {score:.2f}) -- it may not '
-                                  'directly address your query. Consider rephrasing.')}"
+            warning = (
+                f'! This is a weak match (relevance {score:.2f}) -- it may not directly '
+                'address your query. Try discovery instead: "find all papers about X".'
             )
+            print(f"\n  {_c(_WARN, warning)}")
 
         others = result["candidates"][1:4]
         if others:
@@ -174,63 +183,29 @@ def _print_answer(answer: dict) -> None:
     print()
 
 
-def _chat_loop(retrieval_graph, qa_graph, paper_state: dict) -> None:
-    prompt_hint = "Ask a question, name another paper to switch, 'new' for a fresh topic search, 'exit' to quit."
-    print(f"\n{_c(_DIM, prompt_hint)}")
+def _do_discovery(topic: str) -> list[dict]:
+    with _Spinner("Searching broadly across arXiv..."):
+        result = discover_papers(topic)
 
-    raw_log: list[str] = []
-    conversation_history: list[dict] = []
+    diagnostics = (
+        f"[diagnostics] {len(result['queries'])} query formulations, "
+        f"{result['raw_count']} candidates retrieved, {result['unique_count']} unique"
+    )
+    print(f"\n{_c(_DIM, diagnostics)}")
 
-    while True:
-        try:
-            message = input(_c(_PROMPT, "? ")).strip()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            raise _ExitCLI
+    if not result["results"]:
+        print(f"\n  {_c(_WARN, f'No sufficiently relevant papers found for \"{topic}\".')}")
+        return []
 
-        if not message:
-            continue
-        if message.lower() in {"exit", "quit"}:
-            raise _ExitCLI
-        if message.lower() == "new":
-            return
+    found_header = f'Found {len(result["results"])} potentially relevant papers on "{topic}":'
+    print(f"\n{_c(_HEADER, found_header)}")
+    for i, p in enumerate(result["results"], 1):
+        print(f"\n  {_c(_TITLE, str(i) + '.')} {p['title']} ({p['arxiv_id']})")
+        print(f"     relevance: {p['relevance_score']:.2f} -- {p.get('relation', '')}")
 
-        raw_log.append(message)
-
-        direct_id = find_arxiv_id(message)
-        if direct_id:
-            intent_kind, target_id, standalone_query = "new_paper", direct_id, message
-        else:
-            with _Spinner("Working out what you mean..."):
-                intent = resolve_intent(
-                    message,
-                    raw_log[-1 - RAW_LOG_WINDOW : -1],
-                    paper_state["selected_paper"]["title"],
-                )
-            intent_kind, target_id, standalone_query = (
-                intent.intent, intent.paper_id, intent.standalone_query
-            )
-
-        if intent_kind == "new_paper":
-            print(f"\n{_c(_DIM, f'Switching to {target_id}...')}")
-            new_state = _handle_query(retrieval_graph, target_id)
-            if new_state is None:
-                print(f"  {_c(_WARN, 'Staying on the current paper.')}")
-                continue
-            paper_state = new_state
-            conversation_history = []
-            print(f"\n{_c(_DIM, prompt_hint)}")
-            continue
-
-        try:
-            with _Spinner():
-                result = qa_graph.invoke(
-                    {**paper_state, "question": standalone_query, "conversation_history": conversation_history}
-                )
-            conversation_history = result["conversation_history"]
-            _print_answer(result["answer"])
-        except Exception as exc:
-            print(f"\n  {_c(_ERROR, '!')} Unexpected error: {exc}")
+    hint = "Say e.g. 'read paper 2' to load one and get its briefing."
+    print(f"\n{_c(_DIM, hint)}")
+    return result["results"]
 
 
 def main() -> None:
@@ -238,35 +213,78 @@ def main() -> None:
         sys.stdout.reconfigure(encoding="utf-8")
 
     print(_c(_HEADER, "re-search-it -- arXiv paper digest & QA agent"))
-    print(_c(_DIM, "Enter a research topic or a direct arXiv ID (e.g. 2301.12345)."))
-    print(_c(_DIM, "Type 'exit' or 'quit' to leave.\n"))
+    print(_c(_DIM, PROMPT_HINT + "\n"))
 
     retrieval_graph = build_retrieval_graph()
     qa_graph = build_qa_graph()
 
+    active_paper: dict | None = None
+    discovery_list: list[dict] = []
+    conversation_history: list[dict] = []
+    raw_log: list[str] = []
+
     while True:
         try:
-            query = input(_c(_PROMPT, "> ")).strip()
+            message = input(_c(_PROMPT, "> ")).strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break
 
-        if not query:
+        if not message:
             continue
-        if query.lower() in {"exit", "quit"}:
+        if message.lower() in {"exit", "quit"}:
             break
+        if message.lower() == "new":
+            active_paper, discovery_list, conversation_history = None, [], []
+            print(f"\n{_c(_DIM, 'Reset. ' + PROMPT_HINT)}")
+            continue
+
+        raw_log.append(message)
 
         try:
-            paper_state = _handle_query(retrieval_graph, query)
+            direct_id = find_arxiv_id(message)
+            if direct_id:
+                mode, topic, paper_id, selection, standalone_query = (
+                    "lookup", None, direct_id, None, message
+                )
+            else:
+                with _Spinner("Routing..."):
+                    intent = route_top_level(
+                        message,
+                        raw_log[-1 - RAW_LOG_WINDOW : -1],
+                        active_paper["selected_paper"]["title"] if active_paper else None,
+                        discovery_list,
+                    )
+                mode, topic, paper_id, selection, standalone_query = (
+                    intent.mode, intent.topic, intent.paper_id, intent.selection, intent.standalone_query
+                )
+
+            if mode == "discovery":
+                discovery_list = _do_discovery(topic or message)
+                continue
+
+            if mode == "lookup":
+                if selection and 1 <= selection <= len(discovery_list):
+                    target = discovery_list[selection - 1]["arxiv_id"]
+                else:
+                    target = paper_id or topic or message
+                new_state = _do_lookup(retrieval_graph, target)
+                if new_state is not None:
+                    active_paper = new_state
+                    conversation_history = []
+                    print(f"\n{_c(_DIM, PROMPT_HINT)}")
+                continue
+
+            # mode == "qa"
+            with _Spinner():
+                result = qa_graph.invoke(
+                    {**active_paper, "question": standalone_query, "conversation_history": conversation_history}
+                )
+            conversation_history = result["conversation_history"]
+            _print_answer(result["answer"])
+
         except Exception as exc:
             print(f"\n  {_c(_ERROR, '!')} Unexpected error: {exc}")
-            continue
-
-        if paper_state is not None:
-            try:
-                _chat_loop(retrieval_graph, qa_graph, paper_state)
-            except _ExitCLI:
-                break
 
 
 if __name__ == "__main__":

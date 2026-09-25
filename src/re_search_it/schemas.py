@@ -58,21 +58,36 @@ class RetrievedChunk(BaseModel):
     relevance_score: float
 
 
-class IntentResolution(BaseModel):
-    """Routes a chat message before it reaches QA retrieval. Without this, a
-    message like "what does 2301.12345 say?" gets treated as a follow-up about
-    whatever paper is currently loaded instead of a request to switch papers --
-    grounded retrieval on the wrong paper is worse than an ungrounded answer,
-    since it *looks* correct."""
+class TopLevelIntent(BaseModel):
+    """Routes every chat message to one of three operations, BEFORE any
+    retrieval happens. Without this, the system can't distinguish "find me
+    all papers on X" (discovery, many results) from "find the paper about X"
+    (lookup, one result) from "what does this paper say about X" (qa, the
+    already-loaded paper) -- collapsing all three into "answer from whatever
+    paper is loaded" is a routing bug, not a ranking one."""
 
-    intent: Literal["new_paper", "follow_up"]
-    paper_id: str | None = Field(
+    mode: Literal["discovery", "lookup", "qa"] = Field(
+        description="discovery: the user wants MULTIPLE papers on a topic "
+        "(plural language: 'sources', 'papers', 'all', 'any other'). "
+        "lookup: the user wants ONE specific paper (names it, gives an "
+        "arXiv ID, or is picking an item from the most recent discovery "
+        "list). qa: a question about the paper already loaded."
+    )
+    topic: str | None = Field(
         default=None,
-        description="arXiv ID if the user named or clearly implied a different paper",
+        description="What to search for, for discovery/lookup. Infer from "
+        "context if the message doesn't restate it (e.g. 'any other papers "
+        "about that?').",
+    )
+    paper_id: str | None = Field(
+        default=None, description="arXiv ID if the message names one directly"
+    )
+    selection: int | None = Field(
+        default=None,
+        description="1-based index into the most recent discovery list, if "
+        "the user is picking a paper from it (e.g. 'read the second one')",
     )
     standalone_query: str = Field(
-        description="The message rewritten as a self-contained question, with "
-        "pronouns/referents ('they', 'it', 'what do they do') resolved using "
-        "conversation history. If already self-contained, just the message. "
-        "If too ambiguous to resolve confidently, keep the ambiguous wording."
+        description="The message rewritten as self-contained, with pronouns "
+        "resolved via history. Only used for mode='qa'."
     )

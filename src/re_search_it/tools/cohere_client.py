@@ -6,7 +6,7 @@ import cohere
 from pydantic import ValidationError
 
 from re_search_it.config import COHERE_API_KEY
-from re_search_it.schemas import Briefing, IntentResolution, RetrievalPlan
+from re_search_it.schemas import Briefing, RetrievalPlan, TopLevelIntent
 
 CHAT_MODEL = "command-a-03-2025"
 RERANK_MODEL = "rerank-v3.5"
@@ -262,59 +262,73 @@ def answer_question(question: str, evidence_chunks: list[dict], history: list[di
     return response.message.content[0].text.strip()
 
 
-_INTENT_PROMPT = """You route chat messages for a paper-QA assistant. The
-currently loaded paper is: {active_paper}
+_ROUTER_PROMPT = """You route messages for a research-paper assistant with
+three operations:
+
+- "discovery": the user wants MULTIPLE papers on a topic -- plural language
+  ("sources", "papers", "all", "any other"), or asking about a topic/corpus
+  rather than one specific paper (e.g. "find all papers that use X", "any
+  other papers about Y?", "what sources discuss Z?").
+- "lookup": the user wants ONE specific paper -- names it directly, gives an
+  arXiv ID, or is picking an item from the most recent discovery list below
+  (e.g. "read the second one", "load paper 3", "the MojoBench one").
+- "qa": a question about the paper ALREADY LOADED (below). Only valid if a
+  paper is loaded and the question isn't actually about other papers/topics.
+
+Currently loaded paper: {active_paper}
+Most recent discovery list:
+{discovery_list}
 
 Recent conversation:
 {history}
 
-New user message: {message}
+New message: {message}
 
-Decide:
-- "new_paper" if the user names or clearly implies a DIFFERENT paper than the
-  one loaded (mentions an arXiv ID, asks to "fetch"/"look up"/"switch to"
-  another paper, or references a paper ID mentioned earlier in the
-  conversation that was never actually loaded).
-- "follow_up" if the user is asking about the currently loaded paper,
-  including a brand new question about it (not just a continuation of the
-  last answer).
+For "discovery" or "lookup" (except when picking from the discovery list),
+extract "topic": what to search for. If the message doesn't restate the
+topic explicitly (e.g. "any other papers about that?"), infer it from the
+conversation or the loaded paper's subject. If the message directly names an
+arXiv ID, put it in "paper_id" instead (forces "lookup"). If picking from
+the discovery list, set mode "lookup", "selection" to its 1-based index, and
+leave topic/paper_id null.
 
-If intent is "new_paper", extract the arXiv ID (format like 2301.12345 or
-2301.12345v2) from the message or from the conversation history if the
-message itself doesn't contain one (e.g. "can you fetch that" referring back
-to an ID mentioned earlier). If you truly cannot find one, use "follow_up"
-instead -- never invent an ID.
-
-Also produce "standalone_query": rewrite the message as a self-contained
-question with pronouns/vague references ("they", "it", "what do they do")
-resolved using the conversation history. If the message is already
-self-contained, standalone_query is just the message. If it's genuinely too
-ambiguous to resolve confidently (e.g. could mean two different things),
-keep the ambiguous wording as-is rather than guessing.
+Also produce "standalone_query": the message rewritten as self-contained,
+with pronouns ("they", "it", "what do they do") resolved using history.
+Used only for "qa"; for other modes just echo the message. If genuinely too
+ambiguous to resolve, keep the ambiguous wording rather than guessing.
 
 Respond with ONLY JSON:
-{{"intent": "new_paper" or "follow_up", "paper_id": "<id or null>", "standalone_query": "..."}}"""
+{{"mode": "discovery"|"lookup"|"qa", "topic": "<topic or null>", "paper_id": "<id or null>", "selection": <int or null>, "standalone_query": "..."}}"""
 
 
-def resolve_intent(
-    message: str, recent_messages: list[str], active_paper_title: str | None
-) -> IntentResolution:
-    """Classify a chat message as switching papers vs. a follow-up, and
-    resolve pronouns/referents into a standalone retrieval query.
-
-    A cheap regex check for an arXiv ID directly in `message` happens in the
-    caller before this is invoked -- this handles the harder cases: an ID
-    mentioned in an earlier turn ("can you fetch that"), and pronoun
-    resolution for ambiguous follow-ups ("what do they do?").
+def route_top_level(
+    message: str,
+    recent_messages: list[str],
+    active_paper_title: str | None,
+    discovery_list: list[dict] | None,
+) -> TopLevelIntent:
+    """Classify a chat message into discovery/lookup/qa before any retrieval
+    runs. A cheap regex check for an arXiv ID directly in `message` happens
+    in the caller before this is invoked as a fast path; this handles the
+    harder cases: topic inference from context, discovery-list selection,
+    and pronoun resolution for qa follow-ups.
     """
     history_text = "\n".join(recent_messages) or "(no prior messages)"
+    if discovery_list:
+        list_text = "\n".join(
+            f"{i}. {p['title']} ({p['arxiv_id']})" for i, p in enumerate(discovery_list, 1)
+        )
+    else:
+        list_text = "(none)"
+
     response = _client.chat(
         model=CHAT_MODEL,
         messages=[
             {
                 "role": "user",
-                "content": _INTENT_PROMPT.format(
+                "content": _ROUTER_PROMPT.format(
                     active_paper=active_paper_title or "(none loaded)",
+                    discovery_list=list_text,
                     history=history_text,
                     message=message,
                 ),
@@ -324,13 +338,68 @@ def resolve_intent(
     )
     text = response.message.content[0].text
     try:
-        parsed = IntentResolution.model_validate(json.loads(text))
+        parsed = TopLevelIntent.model_validate(json.loads(text))
     except (json.JSONDecodeError, ValidationError):
-        return IntentResolution(intent="follow_up", standalone_query=message)
+        # Fail toward the safest option: qa on whatever's loaded, or a plain
+        # lookup on the raw message if nothing is loaded yet.
+        fallback_mode = "qa" if active_paper_title else "lookup"
+        return TopLevelIntent(mode=fallback_mode, topic=message, standalone_query=message)
 
-    if parsed.intent == "new_paper" and not parsed.paper_id:
-        # Model claimed a paper switch but couldn't name one -- don't act on
-        # a hallucinated intent, fall back to treating it as a question.
-        return IntentResolution(intent="follow_up", standalone_query=parsed.standalone_query)
+    if parsed.mode == "qa" and not active_paper_title:
+        # Can't answer from a paper that isn't loaded -- treat as a lookup instead.
+        return TopLevelIntent(mode="lookup", topic=parsed.standalone_query or message, standalone_query=message)
 
     return parsed
+
+
+_DISCOVERY_EXPAND_PROMPT = """Generate 4-6 different arXiv search phrase
+formulations to broadly discover papers related to this topic. Vary
+terminology, synonyms, and phrasing -- the goal here is recall, not
+precision (a later reranking step handles precision). Output ONLY the
+phrases, one per line, no numbering.
+
+Topic: {topic}"""
+
+
+def generate_discovery_queries(topic: str) -> list[str]:
+    """Expand a topic into several search formulations for broad recall."""
+    response = _client.chat(
+        model=CHAT_MODEL,
+        messages=[{"role": "user", "content": _DISCOVERY_EXPAND_PROMPT.format(topic=topic)}],
+    )
+    text = response.message.content[0].text.strip()
+    phrases = [line.strip("-* ").strip() for line in text.splitlines() if line.strip()]
+    return phrases or [topic]
+
+
+_RELATION_PROMPT = """For each paper below, write ONE short phrase (5-10
+words) describing its relation to the topic "{topic}" -- e.g. "directly
+studies the topic", "uses it in experiments", "evaluates its performance".
+
+Papers:
+{papers}
+
+Respond with ONLY JSON: {{"relations": ["...", "...", ...]}}, same order and
+length as the papers."""
+
+
+def describe_relations(topic: str, papers: list[dict]) -> list[str]:
+    """One short relation blurb per paper, in one batched call."""
+    papers_text = "\n".join(
+        f"{i}. {p['title']}: {p['summary'][:300]}" for i, p in enumerate(papers, 1)
+    )
+    response = _client.chat(
+        model=CHAT_MODEL,
+        messages=[
+            {"role": "user", "content": _RELATION_PROMPT.format(topic=topic, papers=papers_text)}
+        ],
+        response_format={"type": "json_object"},
+    )
+    text = response.message.content[0].text.strip()
+    try:
+        relations = json.loads(text).get("relations", [])
+        if len(relations) == len(papers):
+            return [str(r) for r in relations]
+    except json.JSONDecodeError:
+        pass
+    return ["relevant to the topic"] * len(papers)
