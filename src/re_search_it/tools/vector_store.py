@@ -15,8 +15,11 @@ def get_client() -> chromadb.ClientAPI:
     return _client
 
 
-def get_or_create_collection(collection_id: str) -> Collection:
-    return get_client().get_or_create_collection(name=collection_id)
+def get_or_create_collection(collection_id: str, metadata: dict | None = None) -> Collection:
+    kwargs = {"name": collection_id}
+    if metadata:
+        kwargs["metadata"] = metadata
+    return get_client().get_or_create_collection(**kwargs)
 
 
 def add_chunks(

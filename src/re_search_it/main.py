@@ -29,22 +29,31 @@ def _handle_query(graph, query: str) -> None:
     if result.get("is_direct_id"):
         print("\nFound paper:")
         _print_paper(result["selected_paper"])
+    else:
+        category = result.get("category")
+        print(f"\nSearch terms used: {', '.join(result.get('search_terms', []))}"
+              + (f" (category: {category})" if category else ""))
+        print(f"Top match ({len(result['candidates'])} candidates considered):")
+        _print_paper(result["selected_paper"])
+
+        if result.get("low_confidence"):
+            print("\n  ! Low-confidence match -- try rephrasing your query for better results.")
+
+        others = result["candidates"][1:4]
+        if others:
+            print("\nOther candidates:")
+            for c in others:
+                print(f"  - {c['arxiv_id']}  {c['title']}  (relevance: {c.get('relevance_score', 0):.3f})")
+
+    _print_parse_summary(result)
+
+
+def _print_parse_summary(result: dict) -> None:
+    sections = result.get("parsed_sections")
+    if not sections:
         return
-
-    category = result.get("category")
-    print(f"\nSearch terms used: {', '.join(result.get('search_terms', []))}"
-          + (f" (category: {category})" if category else ""))
-    print(f"Top match ({len(result['candidates'])} candidates considered):")
-    _print_paper(result["selected_paper"])
-
-    if result.get("low_confidence"):
-        print("\n  ! Low-confidence match -- try rephrasing your query for better results.")
-
-    others = result["candidates"][1:4]
-    if others:
-        print("\nOther candidates:")
-        for c in others:
-            print(f"  - {c['arxiv_id']}  {c['title']}  (relevance: {c.get('relevance_score', 0):.3f})")
+    print(f"\nParsed sections ({len(sections)}): {', '.join(sections.keys())}")
+    print(f"Vector collection ready: {result['vector_collection_id']}")
 
 
 def main() -> None:
