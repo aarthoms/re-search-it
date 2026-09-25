@@ -56,3 +56,23 @@ class RetrievedChunk(BaseModel):
     section: str
     chunk_index: int
     relevance_score: float
+
+
+class IntentResolution(BaseModel):
+    """Routes a chat message before it reaches QA retrieval. Without this, a
+    message like "what does 2301.12345 say?" gets treated as a follow-up about
+    whatever paper is currently loaded instead of a request to switch papers --
+    grounded retrieval on the wrong paper is worse than an ungrounded answer,
+    since it *looks* correct."""
+
+    intent: Literal["new_paper", "follow_up"]
+    paper_id: str | None = Field(
+        default=None,
+        description="arXiv ID if the user named or clearly implied a different paper",
+    )
+    standalone_query: str = Field(
+        description="The message rewritten as a self-contained question, with "
+        "pronouns/referents ('they', 'it', 'what do they do') resolved using "
+        "conversation history. If already self-contained, just the message. "
+        "If too ambiguous to resolve confidently, keep the ambiguous wording."
+    )

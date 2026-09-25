@@ -6,7 +6,7 @@ import cohere
 from pydantic import ValidationError
 
 from re_search_it.config import COHERE_API_KEY
-from re_search_it.schemas import Briefing, RetrievalPlan
+from re_search_it.schemas import Briefing, IntentResolution, RetrievalPlan
 
 CHAT_MODEL = "command-a-03-2025"
 RERANK_MODEL = "rerank-v3.5"
@@ -260,3 +260,77 @@ def answer_question(question: str, evidence_chunks: list[dict], history: list[di
     ]
     response = _client.chat(model=CHAT_MODEL, messages=messages)
     return response.message.content[0].text.strip()
+
+
+_INTENT_PROMPT = """You route chat messages for a paper-QA assistant. The
+currently loaded paper is: {active_paper}
+
+Recent conversation:
+{history}
+
+New user message: {message}
+
+Decide:
+- "new_paper" if the user names or clearly implies a DIFFERENT paper than the
+  one loaded (mentions an arXiv ID, asks to "fetch"/"look up"/"switch to"
+  another paper, or references a paper ID mentioned earlier in the
+  conversation that was never actually loaded).
+- "follow_up" if the user is asking about the currently loaded paper,
+  including a brand new question about it (not just a continuation of the
+  last answer).
+
+If intent is "new_paper", extract the arXiv ID (format like 2301.12345 or
+2301.12345v2) from the message or from the conversation history if the
+message itself doesn't contain one (e.g. "can you fetch that" referring back
+to an ID mentioned earlier). If you truly cannot find one, use "follow_up"
+instead -- never invent an ID.
+
+Also produce "standalone_query": rewrite the message as a self-contained
+question with pronouns/vague references ("they", "it", "what do they do")
+resolved using the conversation history. If the message is already
+self-contained, standalone_query is just the message. If it's genuinely too
+ambiguous to resolve confidently (e.g. could mean two different things),
+keep the ambiguous wording as-is rather than guessing.
+
+Respond with ONLY JSON:
+{{"intent": "new_paper" or "follow_up", "paper_id": "<id or null>", "standalone_query": "..."}}"""
+
+
+def resolve_intent(
+    message: str, recent_messages: list[str], active_paper_title: str | None
+) -> IntentResolution:
+    """Classify a chat message as switching papers vs. a follow-up, and
+    resolve pronouns/referents into a standalone retrieval query.
+
+    A cheap regex check for an arXiv ID directly in `message` happens in the
+    caller before this is invoked -- this handles the harder cases: an ID
+    mentioned in an earlier turn ("can you fetch that"), and pronoun
+    resolution for ambiguous follow-ups ("what do they do?").
+    """
+    history_text = "\n".join(recent_messages) or "(no prior messages)"
+    response = _client.chat(
+        model=CHAT_MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": _INTENT_PROMPT.format(
+                    active_paper=active_paper_title or "(none loaded)",
+                    history=history_text,
+                    message=message,
+                ),
+            }
+        ],
+        response_format={"type": "json_object"},
+    )
+    text = response.message.content[0].text
+    try:
+        parsed = IntentResolution.model_validate(json.loads(text))
+    except (json.JSONDecodeError, ValidationError):
+        return IntentResolution(intent="follow_up", standalone_query=message)
+
+    if parsed.intent == "new_paper" and not parsed.paper_id:
+        # Model claimed a paper switch but couldn't name one -- don't act on
+        # a hallucinated intent, fall back to treating it as a question.
+        return IntentResolution(intent="follow_up", standalone_query=parsed.standalone_query)
+
+    return parsed

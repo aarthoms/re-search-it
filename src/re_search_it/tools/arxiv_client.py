@@ -7,6 +7,7 @@ import arxiv
 import requests
 
 _ID_PATTERN = re.compile(r"^\d{4}\.\d{4,5}(v\d+)?$")
+_ID_IN_TEXT_PATTERN = re.compile(r"\d{4}\.\d{4,5}(?:v\d+)?")
 
 _client = arxiv.Client()
 
@@ -14,6 +15,14 @@ _client = arxiv.Client()
 def is_arxiv_id(text: str) -> bool:
     """Detect whether a query string looks like a direct arXiv ID (e.g. 2301.12345)."""
     return bool(_ID_PATTERN.match(text.strip()))
+
+
+def find_arxiv_id(text: str) -> str | None:
+    """Find an arXiv ID anywhere inside a longer message, e.g. a chat message
+    like "what does 2301.12345 say?" -- unlike is_arxiv_id, the ID need not be
+    the whole string."""
+    match = _ID_IN_TEXT_PATTERN.search(text)
+    return match.group(0) if match else None
 
 
 def _result_to_dict(result: arxiv.Result) -> dict:

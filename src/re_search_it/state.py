@@ -26,4 +26,4 @@ class PaperState(TypedDict, total=False):
     retrieved_chunks: list[dict]
     retrieval_rounds: int
     evidence_sufficient: bool
-    answer: str
+    answer: dict
