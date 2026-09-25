@@ -19,3 +19,11 @@ class PaperState(TypedDict, total=False):
     briefing: dict
     conversation_history: list[dict]
     error: str
+
+    # QA loop
+    question: str
+    retrieval_plan: dict
+    retrieved_chunks: list[dict]
+    retrieval_rounds: int
+    evidence_sufficient: bool
+    answer: str

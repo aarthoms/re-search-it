@@ -6,7 +6,7 @@ import cohere
 from pydantic import ValidationError
 
 from re_search_it.config import COHERE_API_KEY
-from re_search_it.schemas import Briefing
+from re_search_it.schemas import Briefing, RetrievalPlan
 
 CHAT_MODEL = "command-a-03-2025"
 RERANK_MODEL = "rerank-v3.5"
@@ -156,3 +156,107 @@ def summarize_paper(title: str, authors: list[str], sections_text: str) -> Brief
             )
 
     raise ValueError(f"Failed to produce a valid briefing after retries: {last_error}")
+
+
+_PLAN_PROMPT = """You plan how to retrieve evidence from a paper's vector store
+to answer a user's question.
+
+Decide:
+- "direct" if the question is answerable from one focused piece of evidence
+  (e.g. "what dataset did they use?", "what model architecture?").
+- "decomposed" if the question requires combining multiple independent facts
+  (e.g. "did X outperform Y, and why?" needs the method, the baseline, AND
+  the results/explanation -- one search rarely surfaces all of that).
+
+For "decomposed", write 2-4 subquestions, each independently answerable by
+a single retrieval.
+
+Also name up to 3 section names (lowercase) where the evidence is most
+likely to live, from this paper's actual sections: {available_sections}.
+Leave section_hints empty if no section is a clearly better bet than
+searching the whole paper.
+
+Respond with ONLY JSON matching this shape:
+{{
+  "mode": "direct" or "decomposed",
+  "subqueries": ["..."],
+  "section_hints": ["..."]
+}}
+
+Question: {question}"""
+
+
+def plan_retrieval(question: str, available_sections: list[str]) -> RetrievalPlan:
+    """Decide direct-vs-decomposed retrieval and which sections to prioritize."""
+    response = _client.chat(
+        model=CHAT_MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": _PLAN_PROMPT.format(
+                    question=question, available_sections=", ".join(available_sections)
+                ),
+            }
+        ],
+        response_format={"type": "json_object"},
+    )
+    text = response.message.content[0].text
+    try:
+        return RetrievalPlan.model_validate(json.loads(text))
+    except (json.JSONDecodeError, ValidationError):
+        # Fall back to the simplest safe plan rather than failing the whole turn.
+        return RetrievalPlan(mode="direct", subqueries=[question], section_hints=[])
+
+
+_REFINE_PROMPT = """You're gathering evidence from a paper to answer a question.
+Here's what you've retrieved so far, and it isn't enough.
+
+Question: {question}
+
+Evidence retrieved so far:
+{evidence}
+
+What's the single most important piece of evidence still missing? Write ONE
+short, focused search query (not a restatement of the original question) that
+would retrieve it. Output ONLY the query text, no commentary."""
+
+
+def refine_query(question: str, evidence_so_far: list[str]) -> str:
+    """Generate one follow-up retrieval query targeting the evidence gap."""
+    evidence_text = "\n---\n".join(evidence_so_far) or "(nothing relevant found yet)"
+    response = _client.chat(
+        model=CHAT_MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": _REFINE_PROMPT.format(question=question, evidence=evidence_text),
+            }
+        ],
+    )
+    return response.message.content[0].text.strip()
+
+
+_ANSWER_PROMPT = """Answer the user's question about this paper using ONLY the
+evidence excerpts below. If the evidence doesn't fully answer the question,
+say so explicitly rather than filling gaps with outside knowledge. Cite which
+section(s) you drew from inline, e.g. "(Results)".
+
+Evidence:
+{evidence}
+
+Question: {question}"""
+
+
+def answer_question(question: str, evidence_chunks: list[dict], history: list[dict]) -> str:
+    """Generate a grounded answer from reranked evidence chunks + conversation history."""
+    evidence_text = "\n---\n".join(
+        f"[{c['section']}] {c['text']}" for c in evidence_chunks
+    )
+    messages = list(history) + [
+        {
+            "role": "user",
+            "content": _ANSWER_PROMPT.format(evidence=evidence_text, question=question),
+        }
+    ]
+    response = _client.chat(model=CHAT_MODEL, messages=messages)
+    return response.message.content[0].text.strip()

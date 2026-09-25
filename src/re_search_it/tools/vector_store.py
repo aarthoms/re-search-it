@@ -33,6 +33,14 @@ def add_chunks(
     collection.add(ids=ids, documents=documents, embeddings=embeddings, metadatas=metadatas)
 
 
-def query_chunks(collection_id: str, query_embedding: list[float], top_k: int = 5) -> dict:
+def query_chunks(
+    collection_id: str,
+    query_embedding: list[float],
+    top_k: int = 5,
+    where: dict | None = None,
+) -> dict:
     collection = get_or_create_collection(collection_id)
-    return collection.query(query_embeddings=[query_embedding], n_results=top_k)
+    kwargs = {"query_embeddings": [query_embedding], "n_results": top_k}
+    if where:
+        kwargs["where"] = where
+    return collection.query(**kwargs)
