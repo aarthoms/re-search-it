@@ -53,7 +53,7 @@ def _print_parse_summary(result: dict) -> None:
     if not sections:
         return
     print(f"\nParsed sections ({len(sections)}): {', '.join(sections.keys())}")
-    print(f"Vector collection ready: {result['vector_collection_id']}")
+    print(f"Chunked & embedded: {result.get('chunk_count', 0)} chunks -> {result['vector_collection_id']}")
 
 
 def main() -> None:

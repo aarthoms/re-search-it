@@ -6,6 +6,8 @@ from re_search_it.config import COHERE_API_KEY
 
 CHAT_MODEL = "command-a-03-2025"
 RERANK_MODEL = "rerank-v3.5"
+EMBED_MODEL = "embed-english-v3.0"
+EMBED_BATCH_SIZE = 96
 
 _client = cohere.ClientV2(api_key=COHERE_API_KEY)
 
@@ -67,3 +69,27 @@ def rerank(query: str, documents: list[str], top_n: int | None = None) -> list[d
         top_n=top_n or len(documents),
     )
     return [{"index": r.index, "relevance_score": r.relevance_score} for r in response.results]
+
+
+def embed(texts: list[str], input_type: str = "search_document") -> list[list[float]]:
+    """Embed a batch of texts.
+
+    input_type="search_document" for chunks going into the vector store,
+    "search_query" for a user question at retrieval time -- Cohere embeds
+    these two asymmetrically, so passing the wrong one degrades relevance.
+    """
+    if not texts:
+        return []
+
+    vectors: list[list[float]] = []
+    for i in range(0, len(texts), EMBED_BATCH_SIZE):
+        batch = texts[i : i + EMBED_BATCH_SIZE]
+        response = _client.embed(
+            model=EMBED_MODEL,
+            texts=batch,
+            input_type=input_type,
+            embedding_types=["float"],
+        )
+        vectors.extend(response.embeddings.float_)
+
+    return vectors
