@@ -21,6 +21,11 @@ def arxiv_retrieval(state: PaperState) -> PaperState:
             return {**state, "error": f"No arXiv paper found for ID: {state['arxiv_id']}"}
         return {**state, "selected_paper": paper, "candidates": [paper]}
 
+    if state.get("candidates"):
+        # query_understanding's exact-title fast path already resolved this
+        # -- nothing to search for, let selection_ranking score/confirm it.
+        return state
+
     category = state.get("category")
     seen_ids: set[str] = set()
     candidates: list[dict] = []

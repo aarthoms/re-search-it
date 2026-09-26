@@ -22,6 +22,10 @@ def get_or_create_collection(collection_id: str, metadata: dict | None = None) -
     return get_client().get_or_create_collection(**kwargs)
 
 
+def collection_chunk_count(collection_id: str) -> int:
+    return get_or_create_collection(collection_id).count()
+
+
 def add_chunks(
     collection_id: str,
     ids: list[str],

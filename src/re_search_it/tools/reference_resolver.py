@@ -17,32 +17,41 @@ import re
 
 from re_search_it.tools.arxiv_client import search_by_topic
 
-_CITATION_PATTERN = re.compile(r"\[[^\[\]]*?\b(?:19|20)\d{2}\b[^\[\]]*?\]")
+_CITATION_PATTERN = re.compile(
+    r"[\[\(][^\[\]()]*?\b(?:19|20)\d{2}\b[^\[\]()]*?[\]\)]"        # [Author, 2023] or (Author, 2023)
+    r"|[A-Z][a-zA-Z\-]+(?:\s+et\s+al\.?)?\s*\(\s*(?:19|20)\d{2}\s*\)"  # Author et al. (2025)
+)
 _SURNAME_PATTERN = re.compile(r"([A-Z][a-zA-Z\-]+)")
 _YEAR_PATTERN = re.compile(r"\b(19|20)\d{2}\b")
 
 
 def looks_like_citation(message: str) -> bool:
-    """Cheap heuristic: a bracketed year, e.g. "[Almazrouei et al., 2023]"."""
+    """Cheap heuristic: a bracketed/parenthesized year, or "Surname et al.
+    (2025)" -- covers both "[Almazrouei et al., 2023]" and "Sobal et al.
+    (2025)" citation styles."""
     return bool(_CITATION_PATTERN.search(message))
 
 
-def _citation_bracket(mention: str) -> str:
-    """The bracketed part itself, e.g. "[Almazrouei et al., 2023]" -- the
-    author surname must come from HERE, not from the informal name that
-    often precedes it ("Falcon [Almazrouei et al., 2023]" -- "Falcon" is not
-    the citation author)."""
-    match = _CITATION_PATTERN.search(mention)
+def _citation_match(mention: str) -> re.Match | None:
+    return _CITATION_PATTERN.search(mention)
+
+
+def _citation_span(mention: str) -> str:
+    """The matched citation text itself, e.g. "[Almazrouei et al., 2023]" or
+    "Sobal et al. (2025)" -- the author surname must come from HERE, not
+    from an informal name that may precede it ("Falcon [Almazrouei et al.,
+    2023]" -- "Falcon" is not the citation author)."""
+    match = _citation_match(mention)
     return match.group(0) if match else mention
 
 
 def _match_local_reference(mention: str, references: list[dict]) -> dict | None:
-    bracket = _citation_bracket(mention)
-    year_match = _YEAR_PATTERN.search(bracket)
+    span = _citation_span(mention)
+    year_match = _YEAR_PATTERN.search(span)
     if not year_match:
         return None
     year = int(year_match.group(0))
-    surname_match = _SURNAME_PATTERN.search(bracket)
+    surname_match = _SURNAME_PATTERN.search(span)
 
     same_year = [r for r in references if r.get("year") == year]
     if not same_year:
@@ -91,11 +100,16 @@ def resolve_reference(mention: str, references: list[dict]) -> str | None:
     if local and local.get("arxiv_id"):
         return local["arxiv_id"]
 
-    bracket = _citation_bracket(mention)
-    surname_match = _SURNAME_PATTERN.search(bracket)
-    year_match = _YEAR_PATTERN.search(bracket)
+    match = _citation_match(mention)
+    span = match.group(0) if match else mention
+    surname_match = _SURNAME_PATTERN.search(span)
+    year_match = _YEAR_PATTERN.search(span)
     if surname_match and year_match:
-        informal_name = mention[: mention.find("[")].strip()
+        # Text before the citation match, if any -- e.g. "Falcon" in
+        # "Falcon [Almazrouei et al., 2023]". Empty for self-contained
+        # styles like "Sobal et al. (2025)", which is fine: no informal
+        # name to add as a keyword in that case.
+        informal_name = mention[: match.start()].strip() if match else ""
         query = f"au:{surname_match.group(1)}"
         if informal_name:
             query += f" AND all:{informal_name}"

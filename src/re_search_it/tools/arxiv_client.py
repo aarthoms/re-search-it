@@ -48,6 +48,26 @@ def search_by_topic(query: str, max_results: int = 5) -> list[dict]:
     return [_result_to_dict(r) for r in _client.results(search)]
 
 
+def _normalize(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", text.lower())
+
+
+def search_by_exact_title(query: str) -> dict | None:
+    """If `query` already IS (or is very close to) a paper's actual title,
+    resolve it directly via one title-field-scoped search -- no LLM
+    expansion call, no 6-query semantic discovery, no rerank needed. This is
+    what "Attention is all you need" should hit instead of burning a full
+    discovery pass and then landing on a lookalike paper by relevance.
+    """
+    results = search_by_topic(f'ti:"{query}"', max_results=3)
+    normalized_query = _normalize(query)
+    for r in results:
+        normalized_title = _normalize(r["title"])
+        if normalized_query == normalized_title:
+            return r
+    return None
+
+
 def get_by_id(arxiv_id: str) -> dict | None:
     """Fetch a single paper's metadata by direct arXiv ID. Returns None if not found."""
     search = arxiv.Search(id_list=[arxiv_id])
@@ -58,15 +78,24 @@ def get_by_id(arxiv_id: str) -> dict | None:
 
 
 def download_pdf(arxiv_id: str, dest_dir: str = "./data/papers") -> str:
-    """Download a paper's PDF by arXiv ID, return the local file path."""
+    """Download a paper's PDF by arXiv ID, return the local file path.
+
+    arXiv PDFs are immutable per version (a new revision gets a new v-suffix,
+    e.g. v1 -> v2), so if the file's already on disk from a previous run,
+    reuse it instead of re-fetching over HTTP.
+    """
+    Path(dest_dir).mkdir(parents=True, exist_ok=True)
+
     search = arxiv.Search(id_list=[arxiv_id])
     results = list(_client.results(search))
     if not results:
         raise ValueError(f"No arXiv paper found for ID: {arxiv_id}")
 
-    Path(dest_dir).mkdir(parents=True, exist_ok=True)
     result = results[0]
     dest_path = Path(dest_dir) / f"{result.get_short_id()}.pdf"
+
+    if dest_path.exists() and dest_path.stat().st_size > 0:
+        return str(dest_path)
 
     response = requests.get(result.pdf_url, timeout=30)
     response.raise_for_status()
