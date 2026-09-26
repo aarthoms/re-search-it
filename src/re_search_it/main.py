@@ -25,6 +25,7 @@ from re_search_it.graph import build_retrieval_graph
 from re_search_it.qa_graph import build_qa_graph
 from re_search_it.tools.arxiv_client import find_arxiv_id
 from re_search_it.tools.cohere_client import route_top_level
+from re_search_it.tools.reference_resolver import looks_like_citation, resolve_reference
 
 colorama_init(autoreset=True)
 
@@ -280,9 +281,23 @@ def main() -> None:
 
         try:
             direct_id = find_arxiv_id(message)
+            resolved_citation = None
+            if not direct_id and state.active_paper and looks_like_citation(message):
+                # A bracketed citation like "Falcon [Almazrouei et al., 2023]"
+                # is a bibliographic reference, not a fresh literature search --
+                # try to resolve it deterministically before ever asking the
+                # LLM router or touching semantic discovery.
+                resolved_citation = resolve_reference(
+                    message, state.active_paper.get("references", [])
+                )
+
             if direct_id:
                 mode, topic, paper_id, selection, standalone_query = (
                     "lookup", None, direct_id, None, message
+                )
+            elif resolved_citation:
+                mode, topic, paper_id, selection, standalone_query = (
+                    "lookup", resolved_citation, None, None, message
                 )
             else:
                 with _Spinner("Routing..."):

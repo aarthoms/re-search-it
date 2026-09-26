@@ -14,6 +14,7 @@ import re
 from re_search_it.state import PaperState
 from re_search_it.tools.arxiv_client import download_pdf
 from re_search_it.tools.pdf_parser import parse_pdf
+from re_search_it.tools.reference_parser import parse_references
 from re_search_it.tools.vector_store import get_or_create_collection
 
 _SAFE_CHARS = re.compile(r"[^a-zA-Z0-9_-]")
@@ -38,6 +39,8 @@ def fetch_parse(state: PaperState) -> PaperState:
     except Exception:
         sections = {"abstract": paper.get("summary", "")}
 
+    references = parse_references(sections.get("references", ""))
+
     collection_id = _collection_id(arxiv_id)
     get_or_create_collection(
         collection_id,
@@ -52,5 +55,6 @@ def fetch_parse(state: PaperState) -> PaperState:
         **state,
         "pdf_path": pdf_path,
         "parsed_sections": sections,
+        "references": references,
         "vector_collection_id": collection_id,
     }

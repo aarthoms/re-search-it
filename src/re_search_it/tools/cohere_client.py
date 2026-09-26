@@ -241,6 +241,16 @@ evidence excerpts below. If the evidence doesn't fully answer the question,
 say so explicitly rather than filling gaps with outside knowledge. Cite which
 section(s) you drew from inline, e.g. "(Results)".
 
+Distinguish, in your wording, between:
+- facts the evidence EXPLICITLY states (state plainly)
+- reasonable INFERENCES from the evidence, e.g. architectural interpretation
+  the paper doesn't spell out (flag as "the paper implies..." or "this
+  suggests..., though it isn't stated directly")
+- things the evidence does NOT cover (say so plainly rather than guessing)
+
+Do not blur these together -- an inference presented as a stated fact is a
+grounding failure even if the inference is reasonable.
+
 Evidence:
 {evidence}
 
@@ -266,16 +276,23 @@ _ROUTER_PROMPT = """You route messages for a research-paper assistant with
 four operations:
 
 - "discovery": the user wants MULTIPLE papers on a NEW topic -- plural
-  language ("sources", "papers", "all", "any other"), or asking about a
-  topic/corpus rather than one specific paper.
+  language ("sources", "papers", "all", "any other") naming or clearly
+  implying a topic that ISN'T just "the ones we already found/loaded".
+  IMPORTANT: "sources"/"papers"/"results" referring back to papers already
+  found this conversation (e.g. "what does your sources tell?", "what do
+  these papers say?") is NOT a new discovery request -- it's a reference
+  to existing results. If a paper is loaded, treat that case as "qa"; the
+  word "sources" alone is not a topic to search arXiv for.
 - "lookup": the user wants ONE specific paper -- names it directly, gives an
   arXiv ID, or is picking an item from the most recent discovery list below
   (e.g. "read the second one", "load paper 3", "the MojoBench one").
 - "qa": a question about the paper ALREADY LOADED (below). PREFER THIS when
   a paper is loaded and the message is a vague/pronoun follow-up with no new
-  topic and no plural language (e.g. "tell me what it says", "what do you
-  mean by that", "what is it about"). Do NOT treat a generic follow-up as a
-  new search just because it's phrased as a question.
+  topic and no plural language naming something NEW (e.g. "tell me what it
+  says", "what do you mean by that", "what is it about", "what does your
+  sources tell?" -- referring to what's already loaded/found, not a fresh
+  search). Do NOT treat a generic follow-up as a new search just because
+  it's phrased as a question or uses a plural word.
 - "search_refinement": the user wants BROADER/WEAKER/MORE results for the
   SAME search they just ran, not a new topic (e.g. "even weak matches",
   "bring me the slightest match for the query I asked above", "show me
@@ -298,6 +315,7 @@ Examples:
 "find all papers about X" -> discovery
 "bring me the slightest matches" (has_last_search=true) -> search_refinement
 "What do you mean by code smells?" (paper loaded, discussing its content) -> qa
+"What does your sources tell?" (paper loaded, referring to what's already found) -> qa
 "new" -> (handled before you see it, ignore)
 
 For "discovery" or "lookup" (except when picking from the discovery list),

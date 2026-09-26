@@ -15,6 +15,7 @@ class PaperState(TypedDict, total=False):
     answerable: bool
     pdf_path: str
     parsed_sections: dict[str, str]
+    references: list[dict]
     vector_collection_id: str
     chunk_count: int
     briefing: dict
