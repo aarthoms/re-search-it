@@ -24,6 +24,14 @@ def _route_after_retrieval(state: PaperState) -> str:
     return "needs_ranking"
 
 
+def _route_after_ranking(state: PaperState) -> str:
+    if state.get("answerable", True):
+        return "resolved"
+    # Best match was below ANSWERABLE_FLOOR -- don't spend a full fetch/
+    # parse/chunk/embed/summarize pass presenting a non-match as an answer.
+    return "unanswerable"
+
+
 def _route_after_fetch_parse(state: PaperState) -> str:
     return "failed" if state.get("error") else "needs_chunking"
 
@@ -53,7 +61,14 @@ def build_retrieval_graph():
             "needs_ranking": "selection_ranking",
         },
     )
-    graph.add_edge("selection_ranking", "fetch_parse")
+    graph.add_conditional_edges(
+        "selection_ranking",
+        _route_after_ranking,
+        {
+            "resolved": "fetch_parse",
+            "unanswerable": END,
+        },
+    )
     graph.add_conditional_edges(
         "fetch_parse",
         _route_after_fetch_parse,

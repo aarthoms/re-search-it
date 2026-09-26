@@ -16,6 +16,7 @@ import random
 import sys
 import threading
 import time
+from dataclasses import dataclass, field
 
 from colorama import Fore, Style, init as colorama_init
 
@@ -90,6 +91,31 @@ class _ExitCLI(Exception):
     """Raised to unwind out of the loop and quit the whole program."""
 
 
+@dataclass
+class ResearchState:
+    """One object, updated every turn, instead of loose locals threaded
+    through the loop by hand. `last_query`/`last_intent` exist specifically
+    so search_refinement can reuse the ORIGINAL search instead of treating
+    the refinement phrasing itself ("even weaker matches") as a new topic."""
+
+    last_query: str | None = None
+    last_intent: dict | None = None
+    candidates: list[dict] = field(default_factory=list)
+    active_paper: dict | None = None
+    conversation_history: list[dict] = field(default_factory=list)
+    raw_log: list[str] = field(default_factory=list)
+
+    def reset_paper(self) -> None:
+        self.active_paper = None
+        self.conversation_history = []
+
+    def reset_all(self) -> None:
+        self.last_query = None
+        self.last_intent = None
+        self.candidates = []
+        self.reset_paper()
+
+
 def _print_paper(paper: dict) -> None:
     print(f"\n  {_c(_TITLE, paper['arxiv_id'])}  {paper['title']}")
     print(f"  {_c(_DIM, 'authors:')} {', '.join(paper['authors'][:3])}"
@@ -120,6 +146,21 @@ def _do_lookup(retrieval_graph, target: str) -> dict | None:
         if category:
             diagnostics += f", category: {category}"
         print(f"\n{_c(_DIM, diagnostics)}")
+
+        if not result.get("answerable", True):
+            # Top score was below ANSWERABLE_FLOOR -- e.g. 0.03. Refuse to
+            # present it as "the answer"; show it as a weak candidate instead.
+            top = result["candidates"][0]
+            warning = (
+                f"! No confident match for that (best relevance "
+                f"{top.get('relevance_score', 0):.3f}). Closest candidates:"
+            )
+            print(f"\n  {_c(_WARN, warning)}")
+            for c in result["candidates"][:5]:
+                print(f"  - {c['arxiv_id']}  {c['title']}  (relevance: {c.get('relevance_score', 0):.3f})")
+            discovery_hint = "Try discovery instead: 'find all papers about X'."
+            print(f"\n{_c(_DIM, discovery_hint)}")
+            return None
 
         print(f"\n{_c(_HEADER, 'Found paper:')}")
         _print_paper(result["selected_paper"])
@@ -183,9 +224,9 @@ def _print_answer(answer: dict) -> None:
     print()
 
 
-def _do_discovery(topic: str) -> list[dict]:
+def _do_discovery(topic: str, relaxed: bool = False) -> list[dict]:
     with _Spinner("Searching broadly across arXiv..."):
-        result = discover_papers(topic)
+        result = discover_papers(topic, relaxed=relaxed)
 
     diagnostics = (
         f"[diagnostics] {len(result['queries'])} query formulations, "
@@ -217,11 +258,7 @@ def main() -> None:
 
     retrieval_graph = build_retrieval_graph()
     qa_graph = build_qa_graph()
-
-    active_paper: dict | None = None
-    discovery_list: list[dict] = []
-    conversation_history: list[dict] = []
-    raw_log: list[str] = []
+    state = ResearchState()
 
     while True:
         try:
@@ -235,11 +272,11 @@ def main() -> None:
         if message.lower() in {"exit", "quit"}:
             break
         if message.lower() == "new":
-            active_paper, discovery_list, conversation_history = None, [], []
+            state.reset_all()
             print(f"\n{_c(_DIM, 'Reset. ' + PROMPT_HINT)}")
             continue
 
-        raw_log.append(message)
+        state.raw_log.append(message)
 
         try:
             direct_id = find_arxiv_id(message)
@@ -251,36 +288,57 @@ def main() -> None:
                 with _Spinner("Routing..."):
                     intent = route_top_level(
                         message,
-                        raw_log[-1 - RAW_LOG_WINDOW : -1],
-                        active_paper["selected_paper"]["title"] if active_paper else None,
-                        discovery_list,
+                        state.raw_log[-1 - RAW_LOG_WINDOW : -1],
+                        state.active_paper["selected_paper"]["title"] if state.active_paper else None,
+                        state.candidates,
+                        has_last_search=state.last_query is not None,
                     )
                 mode, topic, paper_id, selection, standalone_query = (
                     intent.mode, intent.topic, intent.paper_id, intent.selection, intent.standalone_query
                 )
 
             if mode == "discovery":
-                discovery_list = _do_discovery(topic or message)
+                topic = topic or message
+                state.candidates = _do_discovery(topic)
+                state.last_query, state.last_intent = topic, intent.model_dump() if not direct_id else None
+                continue
+
+            if mode == "search_refinement":
+                # Reuse the ORIGINAL search, not this message's wording --
+                # "even weaker matches" is not a topic to embed.
+                refine_topic = state.last_query or topic or message
+                state.candidates = _do_discovery(refine_topic, relaxed=True)
                 continue
 
             if mode == "lookup":
-                if selection and 1 <= selection <= len(discovery_list):
-                    target = discovery_list[selection - 1]["arxiv_id"]
+                if selection and 1 <= selection <= len(state.candidates):
+                    target = state.candidates[selection - 1]["arxiv_id"]
                 else:
                     target = paper_id or topic or message
+                    state.last_query = target
                 new_state = _do_lookup(retrieval_graph, target)
                 if new_state is not None:
-                    active_paper = new_state
-                    conversation_history = []
+                    state.active_paper = new_state
+                    state.conversation_history = []
                     print(f"\n{_c(_DIM, PROMPT_HINT)}")
                 continue
 
-            # mode == "qa"
+            # mode == "qa" -- zero arXiv/discovery calls, only the paper
+            # already loaded is touched.
+            if state.active_paper is None:
+                no_paper_msg = "No paper loaded yet -- search for one first."
+                print(f"\n  {_c(_WARN, no_paper_msg)}")
+                continue
+
             with _Spinner():
                 result = qa_graph.invoke(
-                    {**active_paper, "question": standalone_query, "conversation_history": conversation_history}
+                    {
+                        **state.active_paper,
+                        "question": standalone_query,
+                        "conversation_history": state.conversation_history,
+                    }
                 )
-            conversation_history = result["conversation_history"]
+            state.conversation_history = result["conversation_history"]
             _print_answer(result["answer"])
 
         except Exception as exc:

@@ -66,12 +66,18 @@ class TopLevelIntent(BaseModel):
     already-loaded paper) -- collapsing all three into "answer from whatever
     paper is loaded" is a routing bug, not a ranking one."""
 
-    mode: Literal["discovery", "lookup", "qa"] = Field(
-        description="discovery: the user wants MULTIPLE papers on a topic "
+    mode: Literal["discovery", "lookup", "qa", "search_refinement"] = Field(
+        description="discovery: the user wants MULTIPLE papers on a NEW topic "
         "(plural language: 'sources', 'papers', 'all', 'any other'). "
         "lookup: the user wants ONE specific paper (names it, gives an "
         "arXiv ID, or is picking an item from the most recent discovery "
-        "list). qa: a question about the paper already loaded."
+        "list). qa: a question about the paper already loaded -- prefer this "
+        "when a paper is loaded and the message is a vague/pronoun follow-up "
+        "with no new topic or plural language (e.g. 'tell me what it says', "
+        "'what do you mean by that'). search_refinement: the user wants "
+        "broader/weaker/more results for the SAME search they just asked for "
+        "(e.g. 'even weak matches', 'show me more', 'loosen it up') -- only "
+        "valid if a previous search actually happened."
     )
     topic: str | None = Field(
         default=None,

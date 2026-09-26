@@ -12,6 +12,7 @@ class PaperState(TypedDict, total=False):
     candidates: list[dict]
     selected_paper: dict
     low_confidence: bool
+    answerable: bool
     pdf_path: str
     parsed_sections: dict[str, str]
     vector_collection_id: str

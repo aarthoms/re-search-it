@@ -263,18 +263,26 @@ def answer_question(question: str, evidence_chunks: list[dict], history: list[di
 
 
 _ROUTER_PROMPT = """You route messages for a research-paper assistant with
-three operations:
+four operations:
 
-- "discovery": the user wants MULTIPLE papers on a topic -- plural language
-  ("sources", "papers", "all", "any other"), or asking about a topic/corpus
-  rather than one specific paper (e.g. "find all papers that use X", "any
-  other papers about Y?", "what sources discuss Z?").
+- "discovery": the user wants MULTIPLE papers on a NEW topic -- plural
+  language ("sources", "papers", "all", "any other"), or asking about a
+  topic/corpus rather than one specific paper.
 - "lookup": the user wants ONE specific paper -- names it directly, gives an
   arXiv ID, or is picking an item from the most recent discovery list below
   (e.g. "read the second one", "load paper 3", "the MojoBench one").
-- "qa": a question about the paper ALREADY LOADED (below). Only valid if a
-  paper is loaded and the question isn't actually about other papers/topics.
+- "qa": a question about the paper ALREADY LOADED (below). PREFER THIS when
+  a paper is loaded and the message is a vague/pronoun follow-up with no new
+  topic and no plural language (e.g. "tell me what it says", "what do you
+  mean by that", "what is it about"). Do NOT treat a generic follow-up as a
+  new search just because it's phrased as a question.
+- "search_refinement": the user wants BROADER/WEAKER/MORE results for the
+  SAME search they just ran, not a new topic (e.g. "even weak matches",
+  "bring me the slightest match for the query I asked above", "show me
+  more", "loosen it up"). Only valid if `has_last_search` is true below --
+  if false, treat it as "discovery" instead (there's nothing to refine).
 
+has_last_search: {has_last_search}
 Currently loaded paper: {active_paper}
 Most recent discovery list:
 {discovery_list}
@@ -284,13 +292,22 @@ Recent conversation:
 
 New message: {message}
 
+Examples:
+"MOJO PROGRAMMING LANGUAGE" (nothing loaded yet) -> discovery or lookup depending on phrasing/plurality
+"Tell me what it says?" (paper loaded) -> qa
+"find all papers about X" -> discovery
+"bring me the slightest matches" (has_last_search=true) -> search_refinement
+"What do you mean by code smells?" (paper loaded, discussing its content) -> qa
+"new" -> (handled before you see it, ignore)
+
 For "discovery" or "lookup" (except when picking from the discovery list),
 extract "topic": what to search for. If the message doesn't restate the
-topic explicitly (e.g. "any other papers about that?"), infer it from the
-conversation or the loaded paper's subject. If the message directly names an
-arXiv ID, put it in "paper_id" instead (forces "lookup"). If picking from
-the discovery list, set mode "lookup", "selection" to its 1-based index, and
-leave topic/paper_id null.
+topic explicitly, infer it from the conversation or the loaded paper's
+subject. If the message directly names an arXiv ID, put it in "paper_id"
+instead (forces "lookup"). If picking from the discovery list, set mode
+"lookup", "selection" to its 1-based index, and leave topic/paper_id null.
+For "search_refinement", leave topic/paper_id/selection null -- the caller
+reuses the ORIGINAL search, not this message's wording.
 
 Also produce "standalone_query": the message rewritten as self-contained,
 with pronouns ("they", "it", "what do they do") resolved using history.
@@ -298,7 +315,7 @@ Used only for "qa"; for other modes just echo the message. If genuinely too
 ambiguous to resolve, keep the ambiguous wording rather than guessing.
 
 Respond with ONLY JSON:
-{{"mode": "discovery"|"lookup"|"qa", "topic": "<topic or null>", "paper_id": "<id or null>", "selection": <int or null>, "standalone_query": "..."}}"""
+{{"mode": "discovery"|"lookup"|"qa"|"search_refinement", "topic": "<topic or null>", "paper_id": "<id or null>", "selection": <int or null>, "standalone_query": "..."}}"""
 
 
 def route_top_level(
@@ -306,12 +323,14 @@ def route_top_level(
     recent_messages: list[str],
     active_paper_title: str | None,
     discovery_list: list[dict] | None,
+    has_last_search: bool = False,
 ) -> TopLevelIntent:
-    """Classify a chat message into discovery/lookup/qa before any retrieval
-    runs. A cheap regex check for an arXiv ID directly in `message` happens
-    in the caller before this is invoked as a fast path; this handles the
-    harder cases: topic inference from context, discovery-list selection,
-    and pronoun resolution for qa follow-ups.
+    """Classify a chat message into discovery/lookup/qa/search_refinement
+    before any retrieval runs. A cheap regex check for an arXiv ID directly
+    in `message` happens in the caller before this is invoked as a fast
+    path; this handles the harder cases: topic inference from context,
+    discovery-list selection, refinement-vs-new-search, and pronoun
+    resolution for qa follow-ups.
     """
     history_text = "\n".join(recent_messages) or "(no prior messages)"
     if discovery_list:
@@ -327,6 +346,7 @@ def route_top_level(
             {
                 "role": "user",
                 "content": _ROUTER_PROMPT.format(
+                    has_last_search=has_last_search,
                     active_paper=active_paper_title or "(none loaded)",
                     discovery_list=list_text,
                     history=history_text,
@@ -348,6 +368,10 @@ def route_top_level(
     if parsed.mode == "qa" and not active_paper_title:
         # Can't answer from a paper that isn't loaded -- treat as a lookup instead.
         return TopLevelIntent(mode="lookup", topic=parsed.standalone_query or message, standalone_query=message)
+
+    if parsed.mode == "search_refinement" and not has_last_search:
+        # Nothing to refine -- don't hallucinate a refinement of nothing.
+        return TopLevelIntent(mode="discovery", topic=parsed.topic or message, standalone_query=message)
 
     return parsed
 
