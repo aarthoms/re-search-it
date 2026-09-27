@@ -496,23 +496,41 @@ def extract_discovery_filters(query: str) -> DiscoveryFilters:
         return DiscoveryFilters(topic=query)
 
 
-_DISCOVERY_EXPAND_PROMPT = """Generate 4-6 different arXiv search phrase
-formulations to broadly discover papers related to this topic. Vary
-terminology, synonyms, and phrasing -- the goal here is recall, not
-precision (a later reranking step handles precision). Output ONLY the
-phrases, one per line, no numbering.
+_DISCOVERY_EXPAND_PROMPT = """Generate 4-6 independent, broad search
+formulations for this research topic, each a short (2-4 word) phrase --
+different ways of reaching the same literature, not paraphrases of one
+long sentence.
+
+Rules:
+- Preserve the core research concept.
+- Do NOT include temporal constraints (no "recent", "latest", "2024",
+  "past year", specific years, etc.) -- date filtering is handled
+  separately and deterministically; injecting date language into a search
+  phrase only restricts recall for no benefit.
+- Do NOT include author constraints.
+- Do NOT invent specific papers, methods, datasets, or terminology not
+  implied by the topic itself.
+- Do NOT combine every concept into one query -- each formulation must be
+  independently searchable, not one long restrictive phrase.
+- Vary terminology, acronyms, and abstraction level so different
+  formulations reach the same literature via different words.
+- Output plain phrases only, no surrounding quote marks.
+
+Output ONLY the phrases, one per line, no numbering, no quote marks.
 
 Topic: {topic}"""
 
 
 def generate_discovery_queries(topic: str) -> list[str]:
-    """Expand a topic into several search formulations for broad recall."""
+    """Expand a topic into several independent, temporal/author-free
+    search formulations for broad recall."""
     response = _client.chat(
         model=CHAT_MODEL,
         messages=[{"role": "user", "content": _DISCOVERY_EXPAND_PROMPT.format(topic=topic)}],
     )
     text = response.message.content[0].text.strip()
-    phrases = [line.strip("-* ").strip() for line in text.splitlines() if line.strip()]
+    phrases = [line.strip("-*0123456789. \"'").strip() for line in text.splitlines() if line.strip()]
+    phrases = [p for p in phrases if p]
     return phrases or [topic]
 
 

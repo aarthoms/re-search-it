@@ -8,8 +8,13 @@ immediately.
 
 Supports explicit author/date-range filters ("papers by Almazrouei on LLMs
 published in the past year", "papers on XYZ before 2005") -- these are
-extracted from the request and applied as hard arXiv-side filters (unlike
-the topic search itself, which stays loose/OR-ish for recall).
+extracted from the request UP FRONT (extract_discovery_filters) and applied
+as hard arXiv-side filters on every formulation search, while topic
+expansion (generate_discovery_queries) stays independent of temporal/author
+language -- the LLM's job is "what concepts to search for," never "what
+date range is allowed." That separation is what keeps a historical query
+("papers before 1998") from having its own topic expansion inject
+anachronistic terminology into the search.
 """
 
 from re_search_it.tools.arxiv_client import search_with_filters
@@ -24,6 +29,32 @@ DISCOVERY_RELEVANCE_FLOOR = 0.1
 # Used for search_refinement ("even weak matches", "show me more") -- the
 # user explicitly asked to relax the filter, so let nearly everything through.
 RELAXED_RELEVANCE_FLOOR = 0.02
+
+
+def _run_formulations(formulations: list[str], filters) -> tuple[list[dict], int]:
+    """Search every formulation (AND'd with the filters), dedupe by arXiv
+    ID, and print per-formulation diagnostics. Returns (candidates,
+    raw_count) -- raw_count is BEFORE dedup, so "raw != unique" is visible."""
+    seen_ids: set[str] = set()
+    candidates: list[dict] = []
+    raw_count = 0
+
+    for i, query in enumerate(formulations, 1):
+        found = search_with_filters(
+            query,
+            authors=filters.authors,
+            date_from=filters.date_from,
+            date_to=filters.date_to,
+            max_results=RESULTS_PER_QUERY,
+        )
+        raw_count += len(found)
+        print(f"[discovery] query {i} -> {len(found)} candidates")
+        for paper in found:
+            if paper["arxiv_id"] not in seen_ids:
+                seen_ids.add(paper["arxiv_id"])
+                candidates.append(paper)
+
+    return candidates, raw_count
 
 
 def discover_papers(topic: str, relaxed: bool = False) -> dict:
@@ -49,28 +80,29 @@ def discover_papers(topic: str, relaxed: bool = False) -> dict:
         )
 
     queries = generate_discovery_queries(search_topic)
+    print(f"[discovery] {len(queries)} query formulations")
+    for i, q in enumerate(queries, 1):
+        print(f"  {i}. {q}")
 
-    raw_count = 0
-    seen_ids: set[str] = set()
-    candidates: list[dict] = []
-    for query in queries:
-        found = search_with_filters(
-            query,
-            authors=filters.authors,
-            date_from=filters.date_from,
-            date_to=filters.date_to,
-            max_results=RESULTS_PER_QUERY,
-        )
-        raw_count += len(found)
-        for paper in found:
-            if paper["arxiv_id"] not in seen_ids:
-                seen_ids.add(paper["arxiv_id"])
-                candidates.append(paper)
+    candidates, raw_count = _run_formulations(queries, filters)
+
+    # Bounded zero-result recovery: don't conclude "no papers" just because
+    # the generated formulations all missed -- retry once with the plain
+    # core topic itself (no LLM paraphrasing to go wrong), keeping the same
+    # author/date filters. Mirrors research_recovery's one-shot pattern in
+    # the paper-retrieval graph.
+    if not candidates and search_topic not in queries:
+        print(f"[discovery] 0 candidates from formulations -- falling back to core topic: {search_topic!r}")
+        candidates, fallback_raw = _run_formulations([search_topic], filters)
+        raw_count += fallback_raw
+        queries = [*queries, search_topic]
+
+    print(f"[discovery] total: {raw_count} raw -> {len(candidates)} unique")
 
     if not candidates:
         return {
             "queries": queries,
-            "raw_count": 0,
+            "raw_count": raw_count,
             "unique_count": 0,
             "results": [],
             "filters": filters.model_dump(),

@@ -226,22 +226,11 @@ def _print_answer(answer: dict) -> None:
 
 
 def _do_discovery(topic: str, relaxed: bool = False) -> list[dict]:
-    with _Spinner("Searching broadly across arXiv..."):
-        result = discover_papers(topic, relaxed=relaxed)
-
-    diagnostics = (
-        f"[diagnostics] {len(result['queries'])} query formulations, "
-        f"{result['raw_count']} candidates retrieved, {result['unique_count']} unique"
-    )
-    print(f"\n{_c(_DIM, diagnostics)}")
-
-    filters = result.get("filters") or {}
-    if filters.get("authors") or filters.get("date_from") or filters.get("date_to"):
-        filter_line = (
-            f"[diagnostics] filters -- authors: {filters.get('authors') or 'none'}, "
-            f"date range: {filters.get('date_from') or '-inf'} to {filters.get('date_to') or 'now'}"
-        )
-        print(_c(_DIM, filter_line))
+    # No spinner here -- discover_papers prints its own live diagnostics
+    # (formulations, per-formulation counts, filters), which would garble
+    # against the spinner's \r-based redraw. The prints themselves are the
+    # "it's working" signal now.
+    result = discover_papers(topic, relaxed=relaxed)
 
     if not result["results"]:
         print(f"\n  {_c(_WARN, f'No sufficiently relevant papers found for \"{topic}\".')}")
