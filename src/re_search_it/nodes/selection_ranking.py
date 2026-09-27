@@ -26,6 +26,7 @@ def selection_ranking(state: PaperState) -> PaperState:
 
     top_score = ranked_candidates[0]["relevance_score"]
     answerable = top_score >= ANSWERABLE_FLOOR
+    print(f"[ranking] top relevance: {top_score:.3f}")
 
     return {
         **state,

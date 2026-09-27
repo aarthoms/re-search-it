@@ -6,7 +6,7 @@ import cohere
 from pydantic import ValidationError
 
 from re_search_it.config import COHERE_API_KEY
-from re_search_it.schemas import Briefing, ConceptDiscovery, RetrievalPlan, TopLevelIntent
+from re_search_it.schemas import Briefing, ConceptDiscovery, QueryExpansion, RetrievalPlan, TopLevelIntent
 
 CHAT_MODEL = "command-a-03-2025"
 RERANK_MODEL = "rerank-v3.5"
@@ -15,27 +15,43 @@ EMBED_BATCH_SIZE = 96
 
 _client = cohere.ClientV2(api_key=COHERE_API_KEY)
 
-_EXPAND_PROMPT = """You turn a user's research question into arXiv search terms.
-arXiv search matches keywords in titles/abstracts, not natural language intent,
-so rewrite the query into 2-3 short keyword phrases a paper's title or abstract
-would actually contain.
+_EXPAND_PROMPT = """Decompose this research question into retrieval concepts
+for arXiv search. arXiv keyword search needs SHORT, LOOSE phrases -- it does
+not understand natural-language intent, and one phrase combining every
+concept in the query is too restrictive to find anything (this is the
+actual bug being fixed: legitimate questions were producing zero candidates
+because the generated search was one long multi-concept phrase).
 
-Also identify the single arXiv category the query most clearly belongs to
-(e.g. cs.CL, cs.LG, cs.CV, cs.AI, stat.ML, physics.optics), or NONE if it
-doesn't clearly belong to one.
+Extract:
+- entities: named things (languages, models, datasets, systems), e.g. "Mojo"
+- topics: broader subject areas, e.g. "GPU programming"
+- tasks: actions, e.g. "benchmark", "train", "compare"
+- comparators: things being compared against, if any, e.g. "CUDA", "HIP"
+- domains: 1-2 broad fields, e.g. "high-performance computing"
+- category: a single arXiv category code (cs.CL, cs.LG, cs.CV, cs.AI, cs.DC,
+  cs.PL, stat.ML, ...) if clearly applicable, else null. This is ADVISORY
+  ONLY -- it will never be used as a hard requirement.
+- search_formulations: 6-10 SHORT (2-4 word) loose search phrases. Each
+  phrase combines AT MOST 2 concepts (e.g. an entity + a task, or a topic +
+  a comparator) -- never combine every concept into one phrase, and never
+  produce a Cartesian product of every combination.
 
-Output in EXACTLY this format, no extra commentary:
-CATEGORY: <code or NONE>
-TERMS:
-- <phrase 1>
-- <phrase 2>
-- <phrase 3>
+Example, for "benchmark Mojo against similar languages for GPU acceleration":
+{{"entities": ["Mojo"], "topics": ["GPU programming", "performance benchmarking"],
+  "tasks": ["benchmark", "performance comparison"], "comparators": ["CUDA", "HIP"],
+  "domains": ["high-performance computing"], "category": "cs.PL",
+  "search_formulations": ["Mojo GPU benchmark", "Mojo GPU performance",
+  "Mojo CUDA performance", "Mojo HIP performance", "Mojo GPU programming",
+  "Mojo performance portability"]}}
+
+Respond with ONLY JSON matching that shape.
 
 User query: {query}"""
 
 
 def expand_query(query: str, known_concepts: list[dict] | None = None) -> dict:
-    """Turn a natural-language query into arXiv-friendly search terms + category.
+    """Turn a natural-language query into several loose arXiv search
+    formulations + an advisory category, via structured concept extraction.
 
     `known_concepts` (from research_memory) are folded in as extra context
     so the LLM's phrasing benefits from previously-learned aliases/related
@@ -44,7 +60,9 @@ def expand_query(query: str, known_concepts: list[dict] | None = None) -> dict:
     mentioning JEPA get that fuller vocabulary for free instead of
     re-deriving it (or failing to) from scratch every time.
 
-    Returns {"terms": list[str], "category": str | None}.
+    Returns {"terms": list[str], "category": str | None} -- "terms" now
+    holds 6-10 loose formulations rather than 2-3 phrases; the return shape
+    itself is unchanged so callers (query_understanding.py) don't need to.
     """
     prompt = _EXPAND_PROMPT.format(query=query)
     if known_concepts:
@@ -57,20 +75,15 @@ def expand_query(query: str, known_concepts: list[dict] | None = None) -> dict:
     response = _client.chat(
         model=CHAT_MODEL,
         messages=[{"role": "user", "content": prompt}],
+        response_format={"type": "json_object"},
     )
-    text = response.message.content[0].text.strip()
+    text = response.message.content[0].text
+    try:
+        expansion = QueryExpansion.model_validate(json.loads(text))
+    except (json.JSONDecodeError, ValidationError):
+        return {"terms": [query], "category": None}
 
-    category = None
-    terms: list[str] = []
-    for line in text.splitlines():
-        line = line.strip()
-        if line.upper().startswith("CATEGORY:"):
-            value = line.split(":", 1)[1].strip()
-            category = None if value.upper() == "NONE" else value
-        elif line.startswith("-"):
-            terms.append(line.lstrip("-* ").strip())
-
-    return {"terms": terms or [query], "category": category}
+    return {"terms": expansion.search_formulations[:10], "category": expansion.category}
 
 
 def rerank(query: str, documents: list[str], top_n: int | None = None) -> list[dict]:
@@ -298,6 +311,16 @@ four operations:
   these papers say?") is NOT a new discovery request -- it's a reference
   to existing results. If a paper is loaded, treat that case as "qa"; the
   word "sources" alone is not a topic to search arXiv for.
+  ALSO IMPORTANT, the opposite direction: a paper being loaded does NOT
+  mean every follow-up is about that paper. Phrases like "has anyone",
+  "other papers", "other researchers", "else", "similar work",
+  "benchmarked", "trained", "compared" signal the user wants to know what
+  the wider LITERATURE says, not just this one document -- e.g. "has
+  anyone benchmarked Mojo against CUDA?" or "has anyone else trained a
+  model this way?" are discovery requests even with a paper loaded. The
+  test is whether the question is about THIS paper's content (qa) or
+  about what OTHER work exists (discovery), not whether a paper happens
+  to be loaded.
 - "lookup": the user wants ONE specific paper -- names it directly, gives an
   arXiv ID, or is picking an item from the most recent discovery list below
   (e.g. "read the second one", "load paper 3", "the MojoBench one").
@@ -331,6 +354,9 @@ Examples:
 "bring me the slightest matches" (has_last_search=true) -> search_refinement
 "What do you mean by code smells?" (paper loaded, discussing its content) -> qa
 "What does your sources tell?" (paper loaded, referring to what's already found) -> qa
+"Has anyone benchmarked Mojo against similar languages for GPU acceleration?" (paper loaded or not) -> discovery
+"Has anyone else trained a model this way?" (paper loaded, asking about OTHER work) -> discovery
+"What did this paper find about GPU performance?" (paper loaded, asking about THIS document) -> qa
 "new" -> (handled before you see it, ignore)
 
 For "discovery" or "lookup" (except when picking from the discovery list),

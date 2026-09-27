@@ -51,6 +51,39 @@ class RetrievalPlan(BaseModel):
         return value
 
 
+class QueryExpansion(BaseModel):
+    """Structured decomposition of a research query into retrieval concepts,
+    used to generate several independent LOOSE arXiv search formulations
+    instead of one restrictive phrase that requires every concept to
+    co-occur verbatim. All the concept-extraction fields are advisory
+    context for the model producing search_formulations -- only
+    search_formulations and category actually drive retrieval."""
+
+    entities: list[str] = Field(default_factory=list, description="Named things: languages, models, datasets, systems")
+    topics: list[str] = Field(default_factory=list, description="Broader subject areas")
+    tasks: list[str] = Field(default_factory=list, description="Actions: benchmark, train, compare, evaluate")
+    comparators: list[str] = Field(default_factory=list, description="Things being compared against, if any")
+    domains: list[str] = Field(default_factory=list, description="1-2 broad fields, e.g. 'high-performance computing'")
+    category: str | None = Field(
+        default=None,
+        description="A single arXiv category if clearly applicable, else null. "
+        "Advisory only -- retrieval never hard-requires it.",
+    )
+    search_formulations: list[str] = Field(
+        description="6-10 short (2-4 word) loose arXiv search phrases. Each "
+        "combines AT MOST 2 concepts (e.g. entity + task, or topic + "
+        "comparator) -- never every concept in one phrase, never a "
+        "Cartesian product of every combination."
+    )
+
+    @field_validator("search_formulations")
+    @classmethod
+    def _non_empty(cls, value: list[str]) -> list[str]:
+        if not value:
+            raise ValueError("must contain at least one search formulation")
+        return value
+
+
 class ConceptDiscovery(BaseModel):
     """LLM's resolution of an unfamiliar research term (e.g. "JEPA" ->
     "Joint Embedding Predictive Architecture"). Never persisted on trust
