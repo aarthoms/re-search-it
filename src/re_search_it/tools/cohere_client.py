@@ -31,6 +31,9 @@ Extract:
 - category: a single arXiv category code (cs.CL, cs.LG, cs.CV, cs.AI, cs.DC,
   cs.PL, stat.ML, ...) if clearly applicable, else null. This is ADVISORY
   ONLY -- it will never be used as a hard requirement.
+- authors: author surname(s) if the query names one (e.g. "Almazrouei 2023
+  Falcon" or "paper by Almazrouei in 2023"), else empty list.
+- year: a publication year if the query names one, else null.
 - search_formulations: 6-10 SHORT (2-4 word) loose search phrases. Each
   phrase combines AT MOST 2 concepts (e.g. an entity + a task, or a topic +
   a comparator) -- never combine every concept into one phrase, and never
@@ -40,6 +43,7 @@ Example, for "benchmark Mojo against similar languages for GPU acceleration":
 {{"entities": ["Mojo"], "topics": ["GPU programming", "performance benchmarking"],
   "tasks": ["benchmark", "performance comparison"], "comparators": ["CUDA", "HIP"],
   "domains": ["high-performance computing"], "category": "cs.PL",
+  "authors": [], "year": null,
   "search_formulations": ["Mojo GPU benchmark", "Mojo GPU performance",
   "Mojo CUDA performance", "Mojo HIP performance", "Mojo GPU programming",
   "Mojo performance portability"]}}
@@ -60,9 +64,14 @@ def expand_query(query: str, known_concepts: list[dict] | None = None) -> dict:
     mentioning JEPA get that fuller vocabulary for free instead of
     re-deriving it (or failing to) from scratch every time.
 
-    Returns {"terms": list[str], "category": str | None} -- "terms" now
-    holds 6-10 loose formulations rather than 2-3 phrases; the return shape
-    itself is unchanged so callers (query_understanding.py) don't need to.
+    Returns {"terms": list[str], "category": str | None, "authors":
+    list[str], "year": int | None}. "terms" now holds 6-10 loose
+    formulations rather than 2-3 phrases; "authors"/"year" (new) let
+    arxiv_retrieval additively run a precise au: field search alongside the
+    normal keyword search when the query names an author -- e.g. "Almazrouei
+    2023 Falcon" typed with no paper loaded still gets a structured author
+    lookup, not just a generic keyword search that never uses arXiv's au:
+    field at all.
     """
     prompt = _EXPAND_PROMPT.format(query=query)
     if known_concepts:
@@ -81,9 +90,14 @@ def expand_query(query: str, known_concepts: list[dict] | None = None) -> dict:
     try:
         expansion = QueryExpansion.model_validate(json.loads(text))
     except (json.JSONDecodeError, ValidationError):
-        return {"terms": [query], "category": None}
+        return {"terms": [query], "category": None, "authors": [], "year": None}
 
-    return {"terms": expansion.search_formulations[:10], "category": expansion.category}
+    return {
+        "terms": expansion.search_formulations[:10],
+        "category": expansion.category,
+        "authors": expansion.authors[:2],
+        "year": expansion.year,
+    }
 
 
 def rerank(query: str, documents: list[str], top_n: int | None = None) -> list[dict]:

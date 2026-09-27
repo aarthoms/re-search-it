@@ -18,7 +18,7 @@ selection_ranking.py's job. Two things previously killed recall here:
 import re
 
 from re_search_it.state import PaperState
-from re_search_it.tools.arxiv_client import get_by_id, search_by_topic
+from re_search_it.tools.arxiv_client import get_by_id, search_by_author, search_by_topic
 
 MAX_RESULTS_PER_TERM = 20
 _WORD_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9+/#.\-]*")
@@ -53,6 +53,33 @@ def arxiv_retrieval(state: PaperState) -> PaperState:
 
     seen_ids: set[str] = set()
     candidates: list[dict] = []
+
+    # Seeded by query_understanding's near-title search, if any -- merged in
+    # (not a replacement for the formulation search below), so a near-exact
+    # title paper is IN the candidate pool even if none of the formulations
+    # happen to surface it.
+    for paper in state.get("seed_candidates") or []:
+        if paper["arxiv_id"] not in seen_ids:
+            seen_ids.add(paper["arxiv_id"])
+            candidates.append(paper)
+
+    # Additive author-aware search: arXiv's au: field is the correct,
+    # precise way to search by author -- the keyword/abs:/ti: formulations
+    # above never use it, so a query naming an author ("Almazrouei 2023
+    # Falcon") gets a real structured lookup here rather than relying on the
+    # author's surname coincidentally appearing in an abstract.
+    authors = state.get("lookup_authors") or []
+    year = state.get("lookup_year")
+    if authors:
+        print("[lookup] author/year candidate search")
+        keyword = state["query"] if len(state["query"].split()) <= 6 else None
+        author_candidates = search_by_author(authors[0], year=year, keyword=keyword)
+        print(f"[lookup] candidates: {len(author_candidates)}")
+        for paper in author_candidates:
+            if paper["arxiv_id"] not in seen_ids:
+                seen_ids.add(paper["arxiv_id"])
+                candidates.append(paper)
+
     raw_counts: dict[str, int] = {}
 
     for term in formulations:

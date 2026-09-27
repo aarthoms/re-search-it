@@ -9,6 +9,9 @@ class PaperState(TypedDict, total=False):
     arxiv_id: str
     search_terms: list[str]
     category: str | None
+    lookup_authors: list[str]
+    lookup_year: int | None
+    seed_candidates: list[dict]
     candidates: list[dict]
     selected_paper: dict
     low_confidence: bool

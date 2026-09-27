@@ -64,6 +64,12 @@ class QueryExpansion(BaseModel):
     tasks: list[str] = Field(default_factory=list, description="Actions: benchmark, train, compare, evaluate")
     comparators: list[str] = Field(default_factory=list, description="Things being compared against, if any")
     domains: list[str] = Field(default_factory=list, description="1-2 broad fields, e.g. 'high-performance computing'")
+    authors: list[str] = Field(
+        default_factory=list,
+        description="Author surname(s) if the query names one (e.g. 'Almazrouei 2023 Falcon' "
+        "-> ['Almazrouei']), else empty. Used for a precise arXiv au: field search.",
+    )
+    year: int | None = Field(default=None, description="A publication year if the query names one, else null")
     category: str | None = Field(
         default=None,
         description="A single arXiv category if clearly applicable, else null. "
