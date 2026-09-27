@@ -7,6 +7,12 @@ from re_search_it.tools.cohere_client import summarize_paper
 # section-ordered excerpt (abstract/intro/method/results first) is plenty for
 # a briefing and keeps cost/latency predictable.
 MAX_SECTIONS_CHARS = 12000
+# A per-section cap, not just an overall one -- without this, a long
+# introduction alone could consume the entire budget and starve every
+# section after it (the model would then write "findings"/"limitations" it
+# never actually saw). Capping each section means the excerpt spans several
+# sections even when one of them is long.
+MAX_CHARS_PER_SECTION = 3000
 
 _PRIORITY_SECTIONS = [
     "abstract",
@@ -33,7 +39,8 @@ def _build_sections_text(sections: dict[str, str]) -> str:
     for name in ordered_names:
         if remaining <= 0:
             break
-        body = sections[name][:remaining]
+        cap = min(MAX_CHARS_PER_SECTION, remaining)
+        body = sections[name][:cap]
         parts.append(f"## {name}\n{body}")
         remaining -= len(body)
 

@@ -36,8 +36,14 @@ def fetch_parse(state: PaperState) -> PaperState:
 
     try:
         sections = parse_pdf(pdf_path)
+        parse_degraded = False
     except Exception:
+        # Falls back to an abstract-only briefing instead of dying outright
+        # -- but this must be VISIBLE, not silent, since a briefing built
+        # from only the abstract looks identical to a full-paper one
+        # otherwise.
         sections = {"abstract": paper.get("summary", "")}
+        parse_degraded = True
 
     references = parse_references(sections.get("references", ""))
 
@@ -55,6 +61,7 @@ def fetch_parse(state: PaperState) -> PaperState:
         **state,
         "pdf_path": pdf_path,
         "parsed_sections": sections,
+        "parse_degraded": parse_degraded,
         "references": references,
         "vector_collection_id": collection_id,
     }

@@ -7,8 +7,21 @@ from pathlib import Path
 import arxiv
 import requests
 
-_ID_PATTERN = re.compile(r"^\d{4}\.\d{4,5}(v\d+)?$")
-_ID_IN_TEXT_PATTERN = re.compile(r"\d{4}\.\d{4,5}(?:v\d+)?")
+_NEW_ID = r"\d{4}\.\d{4,5}(?:v\d+)?"
+# Old-style IDs (pre-2007): <archive>[.<category>]/<7 digits>[v<n>], e.g.
+# "cs/0112017" or "math.CO/0409461" -- a fixed archive-name whitelist avoids
+# false-positiving on arbitrary "word/7digits" text elsewhere in a message.
+_OLD_ARCHIVES = (
+    r"astro-ph|cond-mat|gr-qc|hep-ex|hep-lat|hep-ph|hep-th|math-ph|nlin|"
+    r"nucl-ex|nucl-th|physics|quant-ph|math|cs|q-bio|q-fin|stat|eess|econ|"
+    r"alg-geom|adap-org|chao-dyn|cmp-lg|comp-gas|dg-ga|funct-an|mtrl-th|"
+    r"patt-sol|plasm-ph|solv-int|supr-con|acc-phys|ao-sci|atom-ph|bayes-an|"
+    r"chem-ph|q-alg"
+)
+_OLD_ID = rf"(?:{_OLD_ARCHIVES})(?:\.[A-Z]{{2}})?/\d{{7}}(?:v\d+)?"
+
+_ID_PATTERN = re.compile(rf"^(?:{_NEW_ID}|{_OLD_ID})$", re.IGNORECASE)
+_ID_IN_TEXT_PATTERN = re.compile(rf"(?:{_NEW_ID}|{_OLD_ID})", re.IGNORECASE)
 
 _client = arxiv.Client()
 
@@ -162,24 +175,24 @@ def get_by_id(arxiv_id: str) -> dict | None:
 def download_pdf(arxiv_id: str, dest_dir: str = "./data/papers") -> str:
     """Download a paper's PDF by arXiv ID, return the local file path.
 
+    Builds the PDF URL directly from the ID (https://arxiv.org/pdf/<id>)
+    instead of doing a second arxiv.Search just to read back the URL --
+    callers always pass an already-resolved, version-qualified ID (from
+    get_by_id/search_by_topic's own get_short_id()), so nothing is lost by
+    skipping that redundant, rate-limited round trip. A 404 (bad ID) surfaces
+    via raise_for_status() instead of an empty-search check.
+
     arXiv PDFs are immutable per version (a new revision gets a new v-suffix,
     e.g. v1 -> v2), so if the file's already on disk from a previous run,
     reuse it instead of re-fetching over HTTP.
     """
     Path(dest_dir).mkdir(parents=True, exist_ok=True)
-
-    search = arxiv.Search(id_list=[arxiv_id])
-    results = list(_client.results(search))
-    if not results:
-        raise ValueError(f"No arXiv paper found for ID: {arxiv_id}")
-
-    result = results[0]
-    dest_path = Path(dest_dir) / f"{result.get_short_id()}.pdf"
+    dest_path = Path(dest_dir) / f"{arxiv_id}.pdf"
 
     if dest_path.exists() and dest_path.stat().st_size > 0:
         return str(dest_path)
 
-    response = requests.get(result.pdf_url, timeout=30)
+    response = requests.get(f"https://arxiv.org/pdf/{arxiv_id}", timeout=30)
     response.raise_for_status()
     dest_path.write_bytes(response.content)
 

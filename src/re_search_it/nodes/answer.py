@@ -26,26 +26,42 @@ def answer(state: PaperState) -> PaperState:
     question = state["question"]
     evidence = state.get("retrieved_chunks", [])[:TOP_N_FOR_ANSWER]
     history = state.get("conversation_history", [])
+    grounded = bool(state.get("evidence_sufficient"))
 
     if not evidence:
-        answer_result = {
-            "text": "I couldn't find anything in this paper relevant to that question.",
-            "sources": [],
-            "grounded": False,
-            "confidence": "low",
-        }
+        text = "I couldn't find anything in this paper relevant to that question."
+        sources = []
     else:
         text = answer_question(question, evidence, history)
-        answer_result = {
-            "text": text,
-            "sources": [{"section": c["section"], "chunk_id": c["id"]} for c in evidence],
-            "grounded": bool(state.get("evidence_sufficient")),
-            "confidence": _confidence(evidence[0]["relevance_score"]),
-        }
+        sources = [{"section": c["section"], "chunk_id": c["id"]} for c in evidence]
+        if not grounded:
+            # Code-enforced, not prompt-only: the prompt already asks the
+            # model to hedge when evidence is weak, but nothing verified it
+            # actually did -- a low-but-nonzero-score chunk set could still
+            # produce a confident-sounding answer the model itself never
+            # flagged as shaky. This disclaimer can't be silently skipped.
+            top_score = evidence[0]["relevance_score"]
+            text = (
+                f"(Low-confidence -- the best evidence I found scored {top_score:.2f} "
+                f"relevance, below what I'd normally trust.)\n\n{text}"
+            )
 
-    updated_history = history + [
-        {"role": "user", "content": question},
-        {"role": "assistant", "content": answer_result["text"]},
-    ]
+    answer_result = {
+        "text": text,
+        "sources": sources,
+        "grounded": grounded,
+        "confidence": _confidence(evidence[0]["relevance_score"]) if evidence else "low",
+    }
+
+    # An ungrounded answer isn't added to history -- letting a shaky earlier
+    # answer anchor later turns (the model treating its own weak guess as an
+    # established fact) is worse than a follow-up question losing a bit of
+    # continuity.
+    updated_history = history
+    if grounded:
+        updated_history = history + [
+            {"role": "user", "content": question},
+            {"role": "assistant", "content": answer_result["text"]},
+        ]
 
     return {**state, "answer": answer_result, "conversation_history": updated_history}

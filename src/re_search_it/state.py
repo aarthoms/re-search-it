@@ -20,6 +20,7 @@ class PaperState(TypedDict, total=False):
     pdf_path: str
     parsed_sections: dict[str, str]
     references: list[dict]
+    parse_degraded: bool
     vector_collection_id: str
     chunk_count: int
     briefing: dict

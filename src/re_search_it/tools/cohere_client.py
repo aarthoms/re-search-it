@@ -94,7 +94,12 @@ def expand_query(query: str, known_concepts: list[dict] | None = None) -> dict:
         return {"terms": [query], "category": None, "authors": [], "year": None}
 
     return {
-        "terms": expansion.search_formulations[:10],
+        # Capped at 6 (not 10): each formulation costs up to 2 rate-limited
+        # arXiv calls (with/without category), so 10 could mean 20+ calls at
+        # ~3s apart per lookup -- a paper title lookup shouldn't take a
+        # minute. 6 is still well within the recall gains this expansion
+        # exists for.
+        "terms": expansion.search_formulations[:6],
         "category": expansion.category,
         "authors": expansion.authors[:2],
         "year": expansion.year,
@@ -145,15 +150,23 @@ def embed(texts: list[str], input_type: str = "search_document") -> list[list[fl
 _BRIEFING_SCHEMA_HINT = """Respond with ONLY a JSON object matching this exact shape:
 {
   "tldr": "1-2 sentence plain-language summary",
-  "problem": "what problem the paper addresses and why it matters",
-  "approach": "the core method/technique",
+  "problem": "what problem the paper addresses",
+  "significance": "one paragraph on why this work matters",
+  "approach": ["method step/aspect 1", "method step/aspect 2", "..."],
   "key_findings": ["finding 1", "finding 2", "..."],
-  "limitations": ["limitation 1 the paper itself acknowledges", "..."]
+  "limitations": ["limitation 1 the paper itself states", "..."],
+  "follow_up_questions": ["question 1 a reader might ask", "..."]
 }
-key_findings and limitations must each contain at least one item. If the
-paper text doesn't explicitly state limitations, infer the most defensible
-ones from its scope (e.g. dataset size, domain, evaluation setup) rather
-than leaving the list empty."""
+approach, key_findings, limitations, and follow_up_questions must each
+contain at least one item. Base every field ONLY on the paper text given
+below -- if a section you'd need wasn't included in the excerpt, don't
+guess at its content.
+
+For limitations specifically: use ONLY what the paper itself states. If (and
+only if) the paper states none at all, you may add at most 1-2 defensible
+ones inferred from its scope (e.g. dataset size, domain, evaluation setup) --
+but each such item MUST be prefixed literally with "(inferred)" so it's
+never mistaken for something the authors actually wrote."""
 
 _SUMMARIZE_PROMPT = """Write a structured executive briefing for this paper.
 

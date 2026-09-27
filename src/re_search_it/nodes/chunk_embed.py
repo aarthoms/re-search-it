@@ -25,7 +25,12 @@ def chunk_embed(state: PaperState) -> PaperState:
     if existing_count > 0:
         return {**state, "chunk_count": existing_count}
 
-    chunks = chunk_sections(state["parsed_sections"])
+    # The references section is bibliography text, not paper content -- it's
+    # already separately parsed (reference_parser.py) for citation
+    # resolution. Embedding it too just adds noise that can outrank genuine
+    # content in QA retrieval.
+    sections = {k: v for k, v in state["parsed_sections"].items() if k != "references"}
+    chunks = chunk_sections(sections)
     if not chunks:
         return {**state, "error": f"No text to chunk for {arxiv_id}"}
 

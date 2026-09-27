@@ -8,6 +8,7 @@ SECTION_HEADERS = [
     "abstract",
     "introduction",
     "related work",
+    "related work and background",
     "background",
     "method",
     "methods",
@@ -15,7 +16,9 @@ SECTION_HEADERS = [
     "approach",
     "experiments",
     "experimental setup",
+    "experiments and results",
     "results",
+    "results and discussion",
     "evaluation",
     "discussion",
     "conclusion",
@@ -27,11 +30,23 @@ SECTION_HEADERS = [
     "appendix",
 ]
 
-# Matches a standalone heading line, optionally numbered (e.g. "3. Related Work").
+# Numeric ("3.", "3.1") or Roman-numeral ("III.") numbering, optionally
+# preceding a heading.
+_NUMBERED_PREFIX = r"(?:\d+\.?\d*\.?\s+|[IVXLCDM]+\.\s+)?"
+
+# Matches a standalone heading line (longer phrases first, so "results and
+# discussion" wins over a bare "results" when both are present).
+_ORDERED_HEADERS = sorted(SECTION_HEADERS, key=len, reverse=True)
 _HEADER_PATTERN = re.compile(
-    r"^\s*(?:\d+\.?\d*\.?\s+)?(" + "|".join(re.escape(h) for h in SECTION_HEADERS) + r")\s*$",
+    r"^\s*" + _NUMBERED_PREFIX + r"(" + "|".join(re.escape(h) for h in _ORDERED_HEADERS) + r")\s*[:.\-—]?\s*$",
     re.IGNORECASE,
 )
+
+# "Abstract—We propose..." / "Abstract. We propose..." -- heading and body
+# share one line, which _HEADER_PATTERN (whole-line match) never catches.
+# Only tried while still in the preamble and before any abstract has been
+# found, so it can't accidentally reclassify a later, unrelated line.
+_INLINE_ABSTRACT_PATTERN = re.compile(r"^\s*abstract\b\s*[:.\-—]+\s*(\S.*)$", re.IGNORECASE)
 
 
 def extract_text(pdf_path: str) -> str:
@@ -44,26 +59,44 @@ def split_sections(text: str) -> dict[str, str]:
     """Split extracted text into sections keyed by lowercase heading name.
 
     Text before the first recognized heading is kept under "preamble".
-    Headings that never appear in the text simply don't appear in the result.
+    Headings that never appear in the text simply don't appear in the
+    result. A heading that appears MORE THAN ONCE (e.g. "Results" in the
+    main text and again in an appendix) has its occurrences appended
+    together rather than the later one silently overwriting the earlier --
+    losing a whole section's text to a same-named heading elsewhere in the
+    paper was a real failure mode this guards against.
     """
-    sections: dict[str, str] = {}
+    sections: dict[str, list[str]] = {}
     current = "preamble"
     buffer: list[str] = []
+
+    def flush() -> None:
+        if buffer:
+            body = "\n".join(buffer).strip()
+            if body:
+                sections.setdefault(current, []).append(body)
 
     for line in text.splitlines():
         match = _HEADER_PATTERN.match(line)
         if match:
-            if buffer:
-                sections[current] = "\n".join(buffer).strip()
+            flush()
             current = match.group(1).strip().lower()
             buffer = []
-        else:
-            buffer.append(line)
+            continue
 
-    if buffer:
-        sections[current] = "\n".join(buffer).strip()
+        if current == "preamble" and "abstract" not in sections:
+            inline = _INLINE_ABSTRACT_PATTERN.match(line)
+            if inline:
+                flush()
+                current = "abstract"
+                buffer = [inline.group(1)]
+                continue
 
-    return {name: body for name, body in sections.items() if body}
+        buffer.append(line)
+
+    flush()
+
+    return {name: "\n\n".join(parts).strip() for name, parts in sections.items() if parts}
 
 
 def parse_pdf(pdf_path: str) -> dict[str, str]:

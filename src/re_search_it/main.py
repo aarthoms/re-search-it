@@ -23,7 +23,8 @@ from colorama import Fore, Style, init as colorama_init
 from re_search_it.discovery import discover_papers
 from re_search_it.graph import build_retrieval_graph
 from re_search_it.qa_graph import build_qa_graph
-from re_search_it.tools.arxiv_client import find_arxiv_id
+from re_search_it.tools.arxiv_client import find_arxiv_id, is_arxiv_id
+from re_search_it.tools.briefing_export import save_briefing
 from re_search_it.tools.cohere_client import route_top_level
 from re_search_it.tools.reference_resolver import looks_like_citation, resolve_reference
 
@@ -121,6 +122,8 @@ def _print_paper(paper: dict) -> None:
     print(f"\n  {_c(_TITLE, paper['arxiv_id'])}  {paper['title']}")
     print(f"  {_c(_DIM, 'authors:')} {', '.join(paper['authors'][:3])}"
           + (" et al." if len(paper["authors"]) > 3 else ""))
+    if paper.get("published"):
+        print(f"  {_c(_DIM, 'published:')} {paper['published'][:10]}")
     if "relevance_score" in paper:
         print(f"  {_c(_DIM, 'relevance:')} {paper['relevance_score']:.3f}")
     print(f"  {_c(_DIM, paper['pdf_url'])}")
@@ -191,28 +194,51 @@ def _print_parse_summary(result: dict) -> None:
     sections_line = f"Parsed sections ({len(sections)}): " + ", ".join(sections.keys())
     print(f"\n{_c(_DIM, sections_line)}")
 
+    if result.get("parse_degraded"):
+        degraded_msg = (
+            "! PDF text extraction failed for this paper -- the briefing below is "
+            "built from the arXiv abstract ONLY, not the full text."
+        )
+        print(f"\n  {_c(_WARN, degraded_msg)}")
+
     chunk_line = (
         f"Chunked & embedded: {result.get('chunk_count', 0)} chunks -> "
         f"{result['vector_collection_id']}"
     )
     print(_c(_DIM, chunk_line))
 
-    _print_briefing(result.get("briefing"))
+    _print_briefing(result.get("briefing"), result.get("selected_paper"))
 
 
-def _print_briefing(briefing: dict | None) -> None:
+def _print_briefing(briefing: dict | None, paper: dict | None) -> None:
     if not briefing:
         return
     print(f"\n{_c(_HEADER, '--- Executive Briefing ---')}")
-    print(f"{_c(_LABEL, 'TL;DR:')} {briefing['tldr']}")
+    if paper:
+        meta = f"{paper['arxiv_id']} -- {', '.join(paper['authors'][:3])}"
+        if paper.get("published"):
+            meta += f" -- {paper['published'][:10]}"
+        meta += f" -- {paper['pdf_url']}"
+        print(_c(_DIM, meta))
+    print(f"\n{_c(_LABEL, 'TL;DR:')} {briefing['tldr']}")
     print(f"\n{_c(_LABEL, 'Problem:')} {briefing['problem']}")
-    print(f"\n{_c(_LABEL, 'Approach:')} {briefing['approach']}")
+    print(f"\n{_c(_LABEL, 'Why it matters:')} {briefing['significance']}")
+    print(f"\n{_c(_LABEL, 'Approach:')}")
+    for a in briefing["approach"]:
+        print(f"  - {a}")
     print(f"\n{_c(_LABEL, 'Key findings:')}")
     for f in briefing["key_findings"]:
         print(f"  - {f}")
     print(f"\n{_c(_LABEL, 'Limitations:')}")
     for lim in briefing["limitations"]:
         print(f"  - {lim}")
+    print(f"\n{_c(_LABEL, 'Follow-up questions you could ask:')}")
+    for q in briefing["follow_up_questions"]:
+        print(f"  - {q}")
+
+    if paper:
+        saved_path = save_briefing(paper, briefing)
+        print(f"\n{_c(_DIM, f'Saved: {saved_path}')}")
 
 
 def _print_answer(answer: dict) -> None:
@@ -220,8 +246,8 @@ def _print_answer(answer: dict) -> None:
     if answer["sources"]:
         sections = ", ".join(sorted({s["section"] for s in answer["sources"]}))
         print(f"{_c(_DIM, f'Sources: {sections}')}")
-    if answer["confidence"] == "low":
-        print(f"{_c(_WARN, '(low-confidence -- evidence for this was weak)')}")
+    if not answer["grounded"]:
+        print(f"{_c(_WARN, '(not grounded -- treat this answer with caution)')}")
     print()
 
 
@@ -277,7 +303,16 @@ def main() -> None:
         state.raw_log.append(message)
 
         try:
+            # Only treat an ID-shaped substring as a forced paper switch
+            # when either no paper is loaded yet (nothing to lose), or the
+            # message basically IS just the ID -- a question like "how does
+            # this compare to 2301.12345?" mentions an ID but is clearly a
+            # question about the ACTIVE paper, not a request to switch away
+            # from it. Let the router (which has full context) decide those
+            # cases instead of a blind regex short-circuit.
             direct_id = find_arxiv_id(message)
+            if direct_id and state.active_paper and not is_arxiv_id(message.strip()):
+                direct_id = None
             resolved_citation = None
             if not direct_id and state.active_paper and looks_like_citation(message):
                 # A bracketed citation like "Falcon [Almazrouei et al., 2023]"

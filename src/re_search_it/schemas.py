@@ -6,17 +6,26 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class Briefing(BaseModel):
-    """Structured executive briefing for a paper. `limitations` is required and
-    non-empty -- a briefing that omits limitations misrepresents the paper's
-    claims as unconditional, so we refuse to accept one that skips it."""
+    """Structured executive briefing for a paper. `limitations` is required
+    and non-empty -- a briefing that omits limitations misrepresents the
+    paper's claims as unconditional, so we refuse to accept one that skips
+    it. Limitations the paper doesn't explicitly state are marked
+    "(inferred)" rather than presented as the paper's own claim -- see
+    tools/cohere_client.py's summarize prompt."""
 
     tldr: str = Field(description="1-2 sentence plain-language summary")
-    problem: str = Field(description="What problem the paper addresses and why it matters")
-    approach: str = Field(description="The core method/technique")
+    problem: str = Field(description="What problem the paper addresses")
+    significance: str = Field(description="One paragraph on why this work matters")
+    approach: list[str] = Field(description="3-6 bullet points describing the method/technique")
     key_findings: list[str] = Field(description="3-5 bullet-point findings/results")
-    limitations: list[str] = Field(description="Limitations the paper itself acknowledges")
+    limitations: list[str] = Field(
+        description="Limitations; ones not explicitly stated by the paper are prefixed '(inferred)'"
+    )
+    follow_up_questions: list[str] = Field(
+        description="3-5 suggested follow-up questions a reader might ask about this paper"
+    )
 
-    @field_validator("key_findings", "limitations")
+    @field_validator("approach", "key_findings", "limitations", "follow_up_questions")
     @classmethod
     def _non_empty(cls, value: list[str]) -> list[str]:
         if not value:
