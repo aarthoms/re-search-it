@@ -51,6 +51,23 @@ class RetrievalPlan(BaseModel):
         return value
 
 
+class ConceptDiscovery(BaseModel):
+    """LLM's resolution of an unfamiliar research term (e.g. "JEPA" ->
+    "Joint Embedding Predictive Architecture"). Never persisted on trust
+    alone -- `confidence` is the model's own self-estimate, and the caller
+    additionally requires real arXiv evidence before writing this to
+    research_memory (see tools/research_discovery.py)."""
+
+    canonical_name: str = Field(description="The full/formal name of the concept")
+    aliases: list[str] = Field(default_factory=list, description="Other short names/acronyms")
+    related_terms: list[str] = Field(
+        default_factory=list,
+        description="Closely related concepts/terminology, for search recall",
+    )
+    domains: list[str] = Field(default_factory=list, description="1-3 broad fields, e.g. 'machine learning'")
+    confidence: float = Field(ge=0.0, le=1.0, description="Self-estimated confidence this is a real, correct resolution")
+
+
 class RetrievedChunk(BaseModel):
     text: str
     section: str

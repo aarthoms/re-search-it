@@ -13,6 +13,7 @@ class PaperState(TypedDict, total=False):
     selected_paper: dict
     low_confidence: bool
     answerable: bool
+    recovery_attempted: bool
     pdf_path: str
     parsed_sections: dict[str, str]
     references: list[dict]

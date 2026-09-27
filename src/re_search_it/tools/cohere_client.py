@@ -6,7 +6,7 @@ import cohere
 from pydantic import ValidationError
 
 from re_search_it.config import COHERE_API_KEY
-from re_search_it.schemas import Briefing, RetrievalPlan, TopLevelIntent
+from re_search_it.schemas import Briefing, ConceptDiscovery, RetrievalPlan, TopLevelIntent
 
 CHAT_MODEL = "command-a-03-2025"
 RERANK_MODEL = "rerank-v3.5"
@@ -34,14 +34,29 @@ TERMS:
 User query: {query}"""
 
 
-def expand_query(query: str) -> dict:
+def expand_query(query: str, known_concepts: list[dict] | None = None) -> dict:
     """Turn a natural-language query into arXiv-friendly search terms + category.
+
+    `known_concepts` (from research_memory) are folded in as extra context
+    so the LLM's phrasing benefits from previously-learned aliases/related
+    terms for anything the query mentions -- e.g. once "JEPA" has been
+    resolved to "Joint Embedding Predictive Architecture", later queries
+    mentioning JEPA get that fuller vocabulary for free instead of
+    re-deriving it (or failing to) from scratch every time.
 
     Returns {"terms": list[str], "category": str | None}.
     """
+    prompt = _EXPAND_PROMPT.format(query=query)
+    if known_concepts:
+        lines = [
+            f"- {c['canonical_name']}: {', '.join([*c['aliases'], *c['related_terms']][:6])}"
+            for c in known_concepts
+        ]
+        prompt += "\n\nKnown terminology for concepts mentioned in this query:\n" + "\n".join(lines)
+
     response = _client.chat(
         model=CHAT_MODEL,
-        messages=[{"role": "user", "content": _EXPAND_PROMPT.format(query=query)}],
+        messages=[{"role": "user", "content": prompt}],
     )
     text = response.message.content[0].text.strip()
 
@@ -445,3 +460,86 @@ def describe_relations(topic: str, papers: list[dict]) -> list[str]:
     except json.JSONDecodeError:
         pass
     return ["relevant to the topic"] * len(papers)
+
+
+_DISCOVERY_PROMPT = """A research query used terminology that isn't yet in
+our research vocabulary memory. Resolve it.
+
+Query: {query}
+Unfamiliar term to resolve: {term}
+
+Identify:
+- canonical_name: the full/formal name of the concept (e.g. "Joint Embedding
+  Predictive Architecture" for "JEPA")
+- aliases: other short names/acronyms for the same concept
+- related_terms: closely related concepts/terminology useful for arXiv
+  search recall (e.g. "world models", "predictive representation learning")
+- domains: 1-3 broad fields this belongs to (e.g. "machine learning")
+- confidence: your honest confidence (0.0-1.0) that this is a real,
+  established term and not a guess -- use a LOW value if unsure.
+
+Respond with ONLY JSON:
+{{"canonical_name": "...", "aliases": ["..."], "related_terms": ["..."], "domains": ["..."], "confidence": 0.0}}"""
+
+
+def discover_terminology(term: str, query: str) -> ConceptDiscovery | None:
+    """Resolve one unfamiliar term via LLM reasoning. Returns None on
+    malformed output -- the caller (research_discovery.py) still requires
+    real arXiv evidence before trusting/persisting this, so a parse failure
+    here just means "no resolution attempted", not a data-quality problem.
+    """
+    response = _client.chat(
+        model=CHAT_MODEL,
+        messages=[{"role": "user", "content": _DISCOVERY_PROMPT.format(term=term, query=query)}],
+        response_format={"type": "json_object"},
+    )
+    text = response.message.content[0].text
+    try:
+        return ConceptDiscovery.model_validate(json.loads(text))
+    except (json.JSONDecodeError, ValidationError):
+        return None
+
+
+_RECOVERY_PROMPT = """arXiv search for this query returned too few or too
+weak results:
+
+Original query: {query}
+{concept_context}
+
+Generate up to 6 SHORT, LOOSE arXiv search phrases (2-5 words each) to
+maximize recall. Each phrase should combine the core concept with at most
+ONE additional angle/modifier -- do NOT combine many concepts into one long
+quoted phrase (that's overly restrictive, and is exactly what already
+failed). Vary terminology, acronyms, and related angles across the phrases.
+
+Example style: for "graph neural networks adversarial attacks cybersecurity"
+-> "graph neural network adversarial", "GNN adversarial attack", "graph
+neural network poisoning", "GNN intrusion detection".
+
+Output ONLY the phrases, one per line, no numbering."""
+
+
+def generate_recovery_queries(query: str, concept: dict | None = None) -> list[str]:
+    """Broadened, loose search formulations for the arXiv-recovery retry
+    path (see nodes/research_recovery.py) -- only called on retrieval
+    failure, never on the normal path, since it's an extra LLM call.
+    """
+    concept_context = ""
+    if concept:
+        known = ", ".join(
+            dict.fromkeys([concept["canonical_name"], *concept["aliases"], *concept["related_terms"]])
+        )
+        concept_context = f"Known terminology for this concept: {known}"
+
+    response = _client.chat(
+        model=CHAT_MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": _RECOVERY_PROMPT.format(query=query, concept_context=concept_context),
+            }
+        ],
+    )
+    text = response.message.content[0].text.strip()
+    phrases = [line.lstrip("-* ").strip() for line in text.splitlines() if line.strip()]
+    return phrases[:6] or [query]
