@@ -119,20 +119,24 @@ Chunk embeddings use `input_type="search_query"` vs. `"search_document"` asymmet
 
 ```mermaid
 flowchart LR
-    T(["topic"]) --> GQ["generate_discovery_queries\n4-6 varied formulations"]
-    GQ --> S1["arXiv search\nper formulation"]
+    T(["request"]) --> XF["extract_discovery_filters\nauthors, date range, clean topic"]
+    XF --> GQ["generate_discovery_queries\n4-6 varied formulations"]
+    GQ --> S1["arXiv search per formulation\nAND'd with author/date filters"]
     S1 --> DD["dedupe by arXiv ID"]
-    DD --> RR["rerank vs. topic\n(rerank-v3.5)"]
+    DD --> RR["rerank vs. original request\n(rerank-v3.5)"]
     RR --> FLT["filter by relevance floor"]
     FLT --> REL["describe_relations\none batched LLM call:\nwhy each result is relevant"]
     REL --> LIST(["ranked list — NOT fetched/parsed/embedded"])
 
+    style XF fill:#2d9d78,color:#fff
     style GQ fill:#2d9d78,color:#fff
     style RR fill:#2d9d78,color:#fff
     style REL fill:#2d9d78,color:#fff
 ```
 
 Discovery deliberately **stops at a list**. A paper only gets the expensive fetch → parse → chunk → embed → summarize treatment once the user picks one (`"read paper 2"`), which routes into the retrieval graph above.
+
+**Author and date-range filtering** ("papers by Almazrouei and Touvron on language models", "recent developments in JEPA", "papers on X before 2005", "papers from 01/01/2026 to 03/04/2026") is extracted from the request up front and applied as a **hard** arXiv-side filter (`au:A1 OR au:A2` AND'd with `submittedDate:[...]`) — unlike the topic search itself, which stays loose for recall, and unlike the LLM-guessed category elsewhere in this project (soft/additive), author/date constraints here are things the user explicitly stated, so a query for "papers before 2005" should never surface a 2010 paper. "Recent"/vague ranges default to a 2-year window from today; an explicit `MM/DD/YYYY` range is used as-is (ambiguous day/month order defaults to `MM/DD`).
 
 ## 4. Persistent research memory (bounded, not a knowledge graph)
 
@@ -161,6 +165,8 @@ No open web search is wired in (no such API is configured for this project) — 
 - Discovery/recovery can't validate terminology with zero arXiv footprint (no web-search fallback).
 - `research_memory`'s lookup scans the full concept table per query — fine at a personal-vocabulary scale, not designed to scale to a large shared vocabulary.
 - No automated eval harness for retrieval quality/answer correctness beyond the unit test suite (`pytest tests/`, mocked LLM/network calls) and manual live spot-checks.
+- Multi-author date-range discovery (`generate_discovery_queries`) can paraphrase a topic into period-inappropriate terminology for historical searches — e.g. asking for pre-1998 neural network papers can yield formulations like "deep learning architectures," a term that didn't exist yet, correctly returning zero for that specific phrasing even though period-appropriate formulations (e.g. "connectionist systems") would find real results. The date filter mechanism itself is correct (live-verified against real 1990s arXiv papers); the LLM's phrasing isn't yet period-aware.
+- Author matching in discovery is `au:` OR-matched and unverified against a full author list (unlike `search_by_author` in the single-paper lookup path, which does verify) — a common surname could pull in an unrelated author's papers.
 
 ## Tech Stack
 

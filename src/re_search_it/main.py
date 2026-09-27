@@ -235,6 +235,14 @@ def _do_discovery(topic: str, relaxed: bool = False) -> list[dict]:
     )
     print(f"\n{_c(_DIM, diagnostics)}")
 
+    filters = result.get("filters") or {}
+    if filters.get("authors") or filters.get("date_from") or filters.get("date_to"):
+        filter_line = (
+            f"[diagnostics] filters -- authors: {filters.get('authors') or 'none'}, "
+            f"date range: {filters.get('date_from') or '-inf'} to {filters.get('date_to') or 'now'}"
+        )
+        print(_c(_DIM, filter_line))
+
     if not result["results"]:
         print(f"\n  {_c(_WARN, f'No sufficiently relevant papers found for \"{topic}\".')}")
         return []
@@ -313,9 +321,15 @@ def main() -> None:
                 )
 
             if mode == "discovery":
-                topic = topic or message
-                state.candidates = _do_discovery(topic)
-                state.last_query, state.last_intent = topic, intent.model_dump() if not direct_id else None
+                # Pass the raw message, not the router's extracted `topic` --
+                # discover_papers does its own author/date-filter extraction
+                # on the full text, and the router's topic field may have
+                # already stripped exactly that phrasing away (e.g. "Recent
+                # developments in X" -> topic "X", losing "recent").
+                discovery_query = message
+                state.candidates = _do_discovery(discovery_query)
+                state.last_query = discovery_query
+                state.last_intent = intent.model_dump() if not direct_id else None
                 continue
 
             if mode == "search_refinement":

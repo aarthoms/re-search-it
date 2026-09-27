@@ -1,12 +1,13 @@
 """Cohere wrapper: query expansion (chat), candidate reranking, embedding, summarization."""
 
 import json
+from datetime import date
 
 import cohere
 from pydantic import ValidationError
 
 from re_search_it.config import COHERE_API_KEY
-from re_search_it.schemas import Briefing, ConceptDiscovery, QueryExpansion, RetrievalPlan, TopLevelIntent
+from re_search_it.schemas import Briefing, ConceptDiscovery, DiscoveryFilters, QueryExpansion, RetrievalPlan, TopLevelIntent
 
 CHAT_MODEL = "command-a-03-2025"
 RERANK_MODEL = "rerank-v3.5"
@@ -447,6 +448,52 @@ def route_top_level(
         return TopLevelIntent(mode="discovery", topic=parsed.topic or message, standalone_query=message)
 
     return parsed
+
+
+_DISCOVERY_FILTERS_PROMPT = """Extract search filters from this research
+discovery request. Today's date is {today}.
+
+Identify:
+- topic: the core subject, with author names and date phrasing stripped
+  out (e.g. "Recent developments in XYZ" -> topic "XYZ")
+- authors: author surname(s) explicitly named, if any, else empty list
+- date_from / date_to: an inclusive ISO date range (YYYY-MM-DD), resolved
+  relative to today's date, or null if unbounded on that side. Examples:
+  "papers published in the past year" -> date_from = one year before
+  today, date_to = today. "before 2005" -> date_from = null, date_to =
+  "2004-12-31". "after 2020" -> date_from = "2021-01-01", date_to = null.
+  "from 01/01/2026 to 03/04/2026" -> date_from = "2026-01-01", date_to =
+  "2026-04-03" (assume MM/DD/YYYY when the format is ambiguous).
+  "recent developments" with no explicit range -> date_from = 2 years
+  before today, date_to = today. If there's no date constraint implied at
+  all, both null.
+
+Respond with ONLY JSON:
+{{"topic": "...", "authors": ["..."], "date_from": "<date or null>", "date_to": "<date or null>"}}
+
+Request: {query}"""
+
+
+def extract_discovery_filters(query: str) -> DiscoveryFilters:
+    """Pull explicit author/date constraints out of a discovery request so
+    they can be applied as hard arXiv filters (search_with_filters),
+    distinct from the topic itself which still goes through the normal
+    loose multi-formulation search."""
+    response = _client.chat(
+        model=CHAT_MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": _DISCOVERY_FILTERS_PROMPT.format(today=date.today().isoformat(), query=query),
+            }
+        ],
+        response_format={"type": "json_object"},
+    )
+    text = response.message.content[0].text
+    try:
+        return DiscoveryFilters.model_validate(json.loads(text))
+    except (json.JSONDecodeError, ValidationError):
+        return DiscoveryFilters(topic=query)
 
 
 _DISCOVERY_EXPAND_PROMPT = """Generate 4-6 different arXiv search phrase

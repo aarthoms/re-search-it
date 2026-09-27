@@ -107,6 +107,24 @@ class ConceptDiscovery(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0, description="Self-estimated confidence this is a real, correct resolution")
 
 
+class DiscoveryFilters(BaseModel):
+    """Author/date constraints extracted from a discovery request, e.g.
+    "papers by Almazrouei and Touvron on LLMs published in the past year".
+    These are explicit user-stated facts (not an LLM guess like
+    QueryExpansion.category), so unlike category they ARE applied as hard
+    filters once extracted -- "papers before 2005" should never show a 2010
+    paper."""
+
+    topic: str = Field(description="The core subject, with author names and date phrasing stripped out")
+    authors: list[str] = Field(default_factory=list, description="Author surname(s) explicitly named, if any")
+    date_from: str | None = Field(
+        default=None, description="Inclusive lower bound, ISO date YYYY-MM-DD, or null if unbounded"
+    )
+    date_to: str | None = Field(
+        default=None, description="Inclusive upper bound, ISO date YYYY-MM-DD, or null if unbounded"
+    )
+
+
 class RetrievedChunk(BaseModel):
     text: str
     section: str

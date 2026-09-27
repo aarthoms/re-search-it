@@ -1,6 +1,7 @@
 """arXiv tool: topic search, direct ID lookup, and PDF download."""
 
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 import arxiv
@@ -108,6 +109,45 @@ def search_by_author(surname: str, year: int | None = None, keyword: str | None 
         year_str = str(year)
         verified = [r for r in verified if r.get("published", "")[:4] == year_str]
     return verified
+
+
+def _date_range_clause(date_from: str | None, date_to: str | None) -> str | None:
+    """arXiv's submittedDate field query, e.g.
+    submittedDate:[20200101000000 TO 20201231235959]. `date_from`/`date_to`
+    are ISO YYYY-MM-DD strings; either side may be open (unbounded)."""
+    if not date_from and not date_to:
+        return None
+    start = (date_from or "19910101").replace("-", "") + "000000"
+    end = (date_to or datetime.now(timezone.utc).strftime("%Y%m%d")).replace("-", "") + "235959"
+    return f"submittedDate:[{start} TO {end}]"
+
+
+def search_with_filters(
+    query: str,
+    authors: list[str] | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    max_results: int = 15,
+) -> list[dict]:
+    """A topic search AND-combined with explicit author/date constraints.
+
+    Unlike the soft/additive category signal elsewhere in this project,
+    author names and date ranges here are things the USER explicitly stated
+    ("papers by Almazrouei before 2020"), not an LLM guess -- so they're
+    applied as genuine hard filters. Multiple authors are OR'd together
+    (papers by any of them), each individually AND'd with the topic query
+    and the date range.
+    """
+    clauses = [f"({query})"] if query else []
+    if authors:
+        author_clause = " OR ".join(f"au:{a}" for a in authors[:5])
+        clauses.append(f"({author_clause})")
+    date_clause = _date_range_clause(date_from, date_to)
+    if date_clause:
+        clauses.append(date_clause)
+
+    full_query = " AND ".join(clauses) if clauses else query
+    return search_by_topic(full_query, max_results=max_results)
 
 
 def get_by_id(arxiv_id: str) -> dict | None:
