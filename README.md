@@ -52,7 +52,7 @@ flowchart TB
     style QA fill:#a34fb0,color:#fff
 ```
 
-A citation mention like `Falcon [Almazrouei et al., 2023]` skips the router entirely — a deterministic resolver (`reference_resolver.py`) checks the loaded paper's own bibliography first, so it never gets treated as a fresh literature search.
+A citation mention like `Falcon [Almazrouei et al., 2023]` (bracketed, parenthesized, or bare "Author YYYY" style) skips the router entirely — a deterministic resolver (`reference_resolver.py`) checks the loaded paper's own bibliography first, then falls to an author+year-verified arXiv search, before ever touching semantic discovery. A direct arXiv ID also skips the router — new-style (`2301.12345`) and old-style (`cs/0112017`, `hep-th/9901001`) are both recognized, typed directly or embedded in a URL/message — but only when the message is essentially just the ID; an ID mentioned mid-question ("how does this compare to 2301.12345?") is left to the router so it doesn't silently switch away from the paper you're discussing.
 
 ## 1. Retrieval graph — finding and processing one paper
 
@@ -70,8 +70,8 @@ flowchart TD
     SR -->|answerable| FP["fetch_parse\ndownload PDF (cached) -> extract text\n-> split into sections -> extract references"]
 
     FP -->|download failed| FAIL
-    FP --> CE["chunk_embed\n200-word overlapping chunks per section\nembed (skipped if already embedded)\n-> store in per-paper Chroma collection"]
-    CE --> SUM["summarize\nschema-validated briefing:\ntl;dr / problem / approach / findings / limitations"]
+    FP --> CE["chunk_embed\n200-word overlapping chunks per section\n(references excluded) -> embed (skipped if\nalready embedded) -> per-paper Chroma collection"]
+    CE --> SUM["summarize\nschema-validated briefing, saved to\ndata/briefings/ as JSON + Markdown"]
     SUM --> DONE(["paper loaded, ready for QA"])
 
     style QU fill:#d97a3f,color:#fff
@@ -94,6 +94,10 @@ flowchart TD
 
 `research_recovery` is bounded to exactly one attempt per query (never loops), and never fires for a direct arXiv ID (a bad literal ID isn't a terminology problem).
 
+**Section-splitting** (`pdf_parser.py`) recognizes both a fixed list of common heading names and, as a fallback, any short numbered line that starts with a capital letter and doesn't end in a period (catching custom headings like "7 Mojo for Financial LLMs" that aren't in the fixed list). A repeated heading (e.g. "Results" in the main text and again in an appendix) has its occurrences merged, not overwritten. If splitting still produces no real structure — everything landing in one bucket — `structure_degraded` is set and surfaced as a warning rather than silently presenting a briefing built from ~6% of the paper as if it were complete; the summarizer falls back to sampling the start, middle, and end of the body instead of truncating from the front. `parse_degraded` is the separate, narrower case where PDF text extraction itself threw (e.g. a scanned PDF) and the pipeline fell back to the arXiv abstract alone.
+
+**The briefing** (`schemas.Briefing`) is `tldr`, `problem`, `significance` (a dedicated "why this matters" paragraph), `approach` (bullet points, not one paragraph), `key_findings`, `limitations` (items the paper doesn't explicitly state are prefixed `(inferred)`, never presented as the authors' own claim), and `follow_up_questions` (must be answerable from the paper's own text). Every briefing is saved to `data/briefings/<arxiv_id>.{json,md}`, combining the generated content with paper metadata (authors, published date, link) that the LLM itself has no reliable way to know.
+
 ## 2. QA graph — answering questions about a loaded paper
 
 ```mermaid
@@ -113,7 +117,7 @@ flowchart TD
     style ANS fill:#2d9d78,color:#fff
 ```
 
-Chunk embeddings use `input_type="search_query"` vs. `"search_document"` asymmetrically (Cohere's embed model expects this), and refinement rounds *accumulate* evidence rather than replacing it.
+Chunk embeddings use `input_type="search_query"` vs. `"search_document"` asymmetrically (Cohere's embed model expects this), and refinement rounds *accumulate* evidence rather than replacing it. Decomposed questions retrieve more chunks than direct ones (8 vs. 5) since a "did X outperform Y, and why?" question needs more evidence than a single fact does, and the top 3 ranked chunks get expanded with their immediately-neighboring chunks (same section, index ±1, fetched by deterministic ID) so the model reads a contiguous passage instead of an isolated 200-word fragment. The answer prompt requires the model to (1) only attribute a number to a workload the *same* evidence excerpt actually names, and (2) always state whether a figure was measured, projected/estimated, or cited from elsewhere — a general paper-wide figure getting misattributed to a specific question's workload, or a "calibrated from published benchmarks" projection being presented as something the authors measured, were both observed failure modes this closes. `evidence_sufficient=False` also code-enforces a disclaimer prefix on the answer text (not just prompt-only) and excludes that turn from conversation history, so a weak answer can't anchor later turns as an established fact.
 
 ## 3. Discovery — finding many papers, not committing to one
 
@@ -161,7 +165,9 @@ No open web search is wired in (no such API is configured for this project) — 
 
 ## Known limitations
 
-- Section-splitting is heading-text heuristics, not real PDF layout parsing — Roman-numeral or stylized headings fall through to a coarser `"preamble"` bucket instead of crashing.
+- Section-splitting is heading-text heuristics, not real PDF layout parsing — it now catches most numbered custom headings and Roman numerals, but an unusual style can still degrade to one bucket (`structure_degraded` flags this rather than silently producing a thin briefing).
+- Chunk metadata has no page numbers — when section detection is degraded, citations have no fallback location more precise than the (possibly-wrong) section label. Deferred: needs page boundaries tracked through extraction → chunking, a real structural change.
+- Re-processing a paper reuses its existing Chroma collection if one exists (skips re-embedding) with no awareness of whether the parsing/chunking logic has changed since — a paper embedded before a parser fix keeps serving the old chunk metadata until its collection is manually cleared or it's fetched under a new version.
 - Discovery/recovery can't validate terminology with zero arXiv footprint (no web-search fallback).
 - `research_memory`'s lookup scans the full concept table per query — fine at a personal-vocabulary scale, not designed to scale to a large shared vocabulary.
 - No automated eval harness for retrieval quality/answer correctness beyond the unit test suite (`pytest tests/`, mocked LLM/network calls) and manual live spot-checks.
