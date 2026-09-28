@@ -1,76 +1,94 @@
-# Autonomous arXiv Paper Digest & QA Agent — Project Overview
+# Design Notes
 
-## What This Project Is
+These are the decisions I'd want to explain in a review: what I tried first, what went
+wrong, what I changed, and what it cost.
 
-An agent that takes a research topic or a specific arXiv paper ID, retrieves the relevant paper(s), parses and indexes their content, produces a structured executive briefing, and answers follow-up questions grounded in the paper's actual text (RAG).
+## Finding the right paper
 
-The system is built as an explicit stateful graph — a sequence of nodes operating on shared state — rather than a single monolithic prompt.
+**Loose searches first, precision later.** My first version turned the user's topic into
+one arXiv query. `GNN adversarial attacks cybersecurity` returned nothing, even though the
+literature exists; one long phrase required every concept to appear together. Now an LLM
+writes up to six short phrasings, each run separately, and one reranker scores the combined
+pool against the user's original wording. The arXiv category the LLM guesses only ever adds
+a second search; it never filters, because a wrong guess used to hide the right paper. Cost:
+more API calls. I capped it at six phrasings to keep a lookup under a minute.
 
-## Architecture Summary
+**Identity before similarity.** Typing "Attention Is All You Need" loaded *Is Attention All
+What You Need?*, which is semantically close and the wrong paper. Finding a specific paper
+isn't a similarity problem, so lookups now try, in order: an arXiv ID (in a URL or on its
+own), an exact title match, then title-word matches added to the candidate pool, and only
+then semantic search. Citations such as `Falcon [Almazrouei et al., 2023]` are resolved
+against the loaded paper's own bibliography first, then by an author-and-year arXiv search.
 
-- **Orchestration:** state graph with nodes connected by explicit edges (one conditional branch: topic search vs. direct paper lookup)
-- **State:** a single typed object (`PaperState`) passed through every node, holding paper metadata, parsed sections, a vector store pointer, chunk count, briefing output, and conversation history
-- **Vector store:** separate from state — state holds only a `vector_collection_id` pointer; embeddings and chunk text/metadata live in the vector DB (e.g. Chroma)
-- **RAG approach:** top-k retrieval with section-aware chunking; groundedness checked via a relevance/confidence mechanism before answering
-- **Failure handling:** at least one explicit graceful-degradation path (e.g. zero arXiv candidates, or PDF parse failure)
+**Relevance isn't answerability.** A paper can be loosely related without being what the
+user asked for. Below a reranker score of 0.15 the system refuses and shows the closest
+candidates; between 0.15 and 0.3 it proceeds with a warning. I'd rather return "no confident
+match" than confidently summarize the wrong paper.
 
-## Pipeline Stages
+**One recovery attempt, never a loop.** If nothing is found, the system tries once more with
+broadened phrasings (and resolves unfamiliar terms first, see below), then gives up.
 
-1. Query Understanding — detect topic search vs. direct arXiv ID
-2. arXiv Retrieval — fetch candidate metadata via arXiv API
-3. Selection/Ranking — pick best candidate (topic search only)
-4. Fetch & Parse — download PDF, extract text/sections
-5. Chunk & Embed — section-aware chunking, store embeddings
-6. Summarize — generate structured executive briefing
-7. QA Loop — retrieve relevant chunks, answer grounded in paper content
+## Parsing
 
-## Build Order
+**Fail visibly.** My demo paper came back as `Parsed sections: preamble, references`:
+every heading was missed, so the briefing was built from roughly 6% of the paper and nothing
+said so. The parser now also recognises numbered custom headings, merges repeated headings
+instead of overwriting them, and flags a split that found no real structure. When that flag
+is set, the CLI shows a warning and the summarizer samples the start, middle and end of the
+paper instead of just the beginning. This is still heuristic; arXiv's HTML version is the
+real fix.
 
-1. Define `PaperState` schema (typed, all fields explicit)
-2. Build skeleton graph with no-op nodes; run end to end
-3. Decide and wire one graceful failure branch (e.g. zero candidates)
-4. Build and standalone-test tools: arXiv client, PDF parser, chunker, vector store wrapper
-5. Implement `query_understanding` (regex/heuristic first, LLM fallback if ambiguous)
-6. Implement `arxiv_retrieval` and `selection_ranking`
-7. Implement `fetch_parse` with degradation on parse failure
-8. Implement `chunk_embed` (section-aware chunking)
-9. Implement `summarize` (structured, validated output — limitations field enforced)
-10. Implement grounding/eval mechanism for QA (e.g. relevance threshold before answering)
-11. Implement `qa` loop with conversation history wired into retrieval/prompt
-12. Manually test QA against a deliberate question set: directly answerable, out of scope, partially covered, comparative-external, metadata, multi-turn
-13. Write README: architecture description, setup instructions, sample run, design-decisions/tradeoffs section, known limitations
-14. Record short video reflection
+**Chunks stay inside sections.** Chunks are 200 words with a 40-word overlap and never cross
+a section boundary, so every piece of evidence has a location I can cite. The reference list
+is excluded from both search and summaries; it was taking up to half of the summary input.
 
-## Design Decisions (to be filled in as built)
+## The briefing
 
-| Decision | Choice | Reason |
-|---|---|---|
-| Orchestration | | |
-| Vector DB | | |
-| Chunking strategy | | |
-| Ranking heuristic | | |
-| Grounding/eval mechanism | | |
-| State persistence | | |
-| Failure case handled | | |
+It's a validated schema, so fields can't be skipped. Two rules came from bad output:
+limitations must come from the paper, or be marked `(inferred)`, because the model filled a
+required list with invented limitations. And suggested follow-up questions must be
+answerable from the paper, because "How does Mojo compare to Julia?" just produced
+"not in the paper".
 
-## Known Limitations / Out of Scope
+## Answering questions
 
-- No UI beyond CLI
-- No non-arXiv sources
-- No fine-tuning
-- No multi-user auth or deployment infra
+**Plan, then retrieve.** A planner decides between a single search and 2–4 sub-questions;
+decomposition costs an extra call, so simple questions skip it. Section hints are soft:
+hinted and whole-paper results are merged and reranked, because my section labels aren't
+always right. If evidence is weak, the system refines the query once, and still reranks
+against the original question so it doesn't drift.
 
-## Status
+**Grounding in code, not only in the prompt.** When I asked about the Mojo paper's LLM
+sentiment benchmark, the answer attributed a paper-wide 20–180x speedup to that workload and
+presented a projected number as if it had been measured. The answer prompt now requires tying
+a number only to the experiment its excerpt names, and saying whether it was measured,
+projected or cited. Below the evidence threshold, a disclaimer is added in code and the turn
+is kept out of chat history, so a weak answer can't anchor the next one.
 
-Not yet started / in progress / complete — update as work proceeds.
+## Routing
 
-# Tools and Tech Stack 
-=> Cohere command-a-03-2025 (command-r-plus was deprecated by Cohere on 2025-09-15) | Rerank-v3.5 | embed-v3 or embed-4
-=> Fallback: Gemini via google-genai SDK (google-generativeai is deprecated upstream)
-=> Lang-Graph (chat model wired via langchain-cohere's ChatCohere)
-=> ChromaDB as vectorDB
+Each message is classified as discovery (many papers), lookup (one paper), a question about
+the loaded paper, or "show me more". Without this, "find papers on X" and "what does this
+paper say about X" were handled the same way. Discovery only lists and ranks papers; a PDF
+is downloaded and indexed only when the user picks one.
 
-## Verified
+## Unfamiliar terminology
 
-- COHERE_API key confirmed working 2026-09-25, tested via raw `cohere` SDK (`ClientV2`) and via `langchain_cohere.ChatCohere`, both against `command-a-03-2025`.
+Searches for acronyms like JEPA found nothing. Now, on a miss, the LLM proposes the full name
+and aliases, and I only save them (in a small SQLite table) if arXiv actually returns a paper
+for that name. It's a weak check, but the model can't make a term "true" just by stating it.
+I chose this over web search to keep arXiv as the only source of evidence.
 
+## Stack and state
+
+LangGraph, with two graphs: one to find and index a paper, one to answer questions. They have
+different state and different failure modes. Session state lives in memory; embeddings are
+stored per paper in Chroma so a paper is only indexed once; SQLite holds only the terminology
+table. I chose Cohere because one free key gives embeddings, a strong reranker and chat. The
+cost is that reviewers need a trial key, which is rate-limited.
+
+## Known weaknesses
+- PDF parsing is heuristic: tables come out flattened and unusual headings can be missed (flagged, not silent).
+- No page numbers in citations.
+- Nothing checks an answer's claims against its evidence after it's written.
+- The evaluation set is small and uses keyword matching.
