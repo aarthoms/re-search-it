@@ -5,6 +5,18 @@ Give it a topic, a title, or an arXiv ID. It finds the paper, writes a structure
 
 Built as explicit LangGraph state graphs — not a single monolithic prompt.
 
+**Demo video:** https://www.loom.com/share/a899e15c19174f88a8763d059bc4397c
+
+## Sample output
+
+| Direct lookup (arXiv ID) | Grounded QA — success (in context) |
+|---|---|
+| ![Direct lookup by arXiv ID](Outputs/Direct-lookup.PNG) | ![Grounded QA success](Outputs/Direct-lookup-QA-Retrieval-withincontext.PNG) |
+
+| Grounded QA — refusal (out of context) | Indirect (topic) lookup |
+|---|---|
+| ![Grounded QA refusal](Outputs/Direct-lookup-QA-Retrieval-withoutcontext.PNG) | ![Indirect lookup](Outputs/Indirect-lookup.PNG) |
+
 ## Setup
 
 ```bash
