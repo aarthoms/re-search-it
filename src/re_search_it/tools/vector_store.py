@@ -37,6 +37,16 @@ def add_chunks(
     collection.add(ids=ids, documents=documents, embeddings=embeddings, metadatas=metadatas)
 
 
+def get_chunks_by_ids(collection_id: str, ids: list[str]) -> dict:
+    """Fetch chunks by exact ID (not similarity search) -- used to pull in
+    neighboring chunks (chunk_index +-1) so QA reads a contiguous passage
+    instead of an isolated fragment. IDs that don't exist are simply
+    omitted from the result, not an error."""
+    if not ids:
+        return {"ids": [], "documents": [], "metadatas": []}
+    return get_or_create_collection(collection_id).get(ids=ids)
+
+
 def query_chunks(
     collection_id: str,
     query_embedding: list[float],

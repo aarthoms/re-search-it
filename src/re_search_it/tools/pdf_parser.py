@@ -48,6 +48,26 @@ _HEADER_PATTERN = re.compile(
 # found, so it can't accidentally reclassify a later, unrelated line.
 _INLINE_ABSTRACT_PATTERN = re.compile(r"^\s*abstract\b\s*[:.\-—]+\s*(\S.*)$", re.IGNORECASE)
 
+# Fallback for custom headings not in SECTION_HEADERS, e.g. "7 Mojo for
+# Financial LLMs" or "7.1 Benchmark Setup" -- any short numbered line
+# starting with a capital letter and NOT ending in a full stop (an ordinary
+# sentence that happens to start with a number, e.g. "3 kernels were
+# tested...", almost always ends with one; a heading almost never does).
+_GENERIC_NUMBERED_HEADING = re.compile(r"^\s*\d+(?:\.\d+)*\.?\s+([A-Z][A-Za-z0-9 ,\-:&']{0,79})$")
+
+
+def _match_heading(line: str) -> str | None:
+    match = _HEADER_PATTERN.match(line)
+    if match:
+        return match.group(1).strip().lower()
+
+    stripped = line.strip()
+    if stripped and not stripped.endswith("."):
+        generic = _GENERIC_NUMBERED_HEADING.match(line)
+        if generic:
+            return generic.group(1).strip().lower()
+    return None
+
 
 def extract_text(pdf_path: str) -> str:
     """Extract raw text from every page of a PDF."""
@@ -77,10 +97,10 @@ def split_sections(text: str) -> dict[str, str]:
                 sections.setdefault(current, []).append(body)
 
     for line in text.splitlines():
-        match = _HEADER_PATTERN.match(line)
-        if match:
+        heading = _match_heading(line)
+        if heading:
             flush()
-            current = match.group(1).strip().lower()
+            current = heading
             buffer = []
             continue
 
@@ -97,6 +117,23 @@ def split_sections(text: str) -> dict[str, str]:
     flush()
 
     return {name: "\n\n".join(parts).strip() for name, parts in sections.items() if parts}
+
+
+def is_structure_degraded(sections: dict[str, str]) -> bool:
+    """True if section-splitting effectively failed even though it didn't
+    raise -- e.g. everything landed in "preamble" (and maybe "references")
+    because the paper uses heading styles _match_heading still can't catch.
+    Downstream code should treat this like a parse failure (visible
+    warning, different summarization sampling strategy) even though
+    parse_pdf() returned successfully.
+    """
+    real_sections = {k: v for k, v in sections.items() if k not in ("preamble", "references")}
+    if not real_sections:
+        return True
+
+    total = sum(len(v) for v in sections.values())
+    preamble_len = len(sections.get("preamble", ""))
+    return total > 0 and (preamble_len / total) > 0.6
 
 
 def parse_pdf(pdf_path: str) -> dict[str, str]:

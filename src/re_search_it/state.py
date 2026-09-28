@@ -21,6 +21,7 @@ class PaperState(TypedDict, total=False):
     parsed_sections: dict[str, str]
     references: list[dict]
     parse_degraded: bool
+    structure_degraded: bool
     vector_collection_id: str
     chunk_count: int
     briefing: dict

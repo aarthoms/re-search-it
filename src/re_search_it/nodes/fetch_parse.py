@@ -13,7 +13,7 @@ import re
 
 from re_search_it.state import PaperState
 from re_search_it.tools.arxiv_client import download_pdf
-from re_search_it.tools.pdf_parser import parse_pdf
+from re_search_it.tools.pdf_parser import is_structure_degraded, parse_pdf
 from re_search_it.tools.reference_parser import parse_references
 from re_search_it.tools.vector_store import get_or_create_collection
 
@@ -34,9 +34,16 @@ def fetch_parse(state: PaperState) -> PaperState:
     except Exception as exc:
         return {**state, "error": f"Failed to download PDF for {arxiv_id}: {exc}"}
 
+    structure_degraded = False
     try:
         sections = parse_pdf(pdf_path)
         parse_degraded = False
+        # split_sections() can "succeed" while still failing in practice --
+        # e.g. everything lands in "preamble" because the paper uses custom
+        # headings _match_heading can't catch. That's not an exception, so
+        # it needs its own explicit check rather than silently passing
+        # through as if the split were fine.
+        structure_degraded = is_structure_degraded(sections)
     except Exception:
         # Falls back to an abstract-only briefing instead of dying outright
         # -- but this must be VISIBLE, not silent, since a briefing built
@@ -62,6 +69,7 @@ def fetch_parse(state: PaperState) -> PaperState:
         "pdf_path": pdf_path,
         "parsed_sections": sections,
         "parse_degraded": parse_degraded,
+        "structure_degraded": structure_degraded,
         "references": references,
         "vector_collection_id": collection_id,
     }

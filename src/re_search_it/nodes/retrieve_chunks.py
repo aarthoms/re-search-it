@@ -12,10 +12,19 @@ so a refinement round adds evidence rather than replacing it.
 
 from re_search_it.state import PaperState
 from re_search_it.tools.cohere_client import embed, rerank
-from re_search_it.tools.vector_store import query_chunks
+from re_search_it.tools.vector_store import get_chunks_by_ids, query_chunks
 
 TOP_K_PER_SUBQUERY = 8
-FINAL_TOP_N = 5
+# Decomposed questions ("did X outperform Y, and why?") genuinely need more
+# evidence than a direct one-fact question -- 5 chunks (~1000 words) is
+# often not enough to cover method + baseline + results + explanation, so
+# those get more room.
+FINAL_TOP_N_DIRECT = 5
+FINAL_TOP_N_DECOMPOSED = 8
+# How many of the top-ranked chunks get expanded with their neighbors
+# (chunk_index +-1) -- bounded so a "deep" question doesn't balloon into a
+# huge number of extra vector-store lookups.
+NEIGHBOR_EXPANSION_COUNT = 3
 # Chunk-level rerank scores run lower than paper-level ones (short excerpts vs.
 # dense abstracts), so this floor is looser than selection_ranking's 0.3.
 RELEVANCE_FLOOR = 0.15
@@ -32,10 +41,31 @@ def _chunk_from_result(collection_result: dict, i: int) -> dict:
     }
 
 
+def _expand_with_neighbors(chunk: dict, arxiv_id: str, collection_id: str) -> dict:
+    """Merge in the immediately-preceding and immediately-following chunk
+    (same section) so the model reads a contiguous passage instead of a
+    200-word fragment that may cut off mid-thought. Chunk IDs are
+    deterministic (f"{arxiv_id}_{section}_{chunk_index}"), so neighbors can
+    be looked up directly by ID rather than another similarity search.
+    """
+    section, idx = chunk["section"], chunk["chunk_index"]
+    neighbor_ids = [f"{arxiv_id}_{section}_{idx - 1}", f"{arxiv_id}_{section}_{idx + 1}"]
+    fetched = get_chunks_by_ids(collection_id, neighbor_ids)
+
+    by_index = {meta["chunk_index"]: doc for doc, meta in zip(fetched["documents"], fetched["metadatas"])}
+    before = by_index.get(idx - 1, "")
+    after = by_index.get(idx + 1, "")
+    expanded_text = " ".join(t for t in (before, chunk["text"], after) if t)
+
+    return {**chunk, "text": expanded_text}
+
+
 def retrieve_chunks(state: PaperState) -> PaperState:
     plan = state["retrieval_plan"]
     collection_id = state["vector_collection_id"]
+    arxiv_id = state["selected_paper"]["arxiv_id"]
     section_hints = plan.get("section_hints") or []
+    final_top_n = FINAL_TOP_N_DECOMPOSED if plan.get("mode") == "decomposed" else FINAL_TOP_N_DIRECT
 
     candidates: dict[str, dict] = {c["id"]: c for c in state.get("retrieved_chunks", [])}
 
@@ -60,10 +90,12 @@ def retrieve_chunks(state: PaperState) -> PaperState:
     if not candidate_list:
         return {**state, "retrieved_chunks": [], "evidence_sufficient": False}
 
-    ranked = rerank(state["question"], [c["text"] for c in candidate_list], top_n=FINAL_TOP_N)
+    ranked = rerank(state["question"], [c["text"] for c in candidate_list], top_n=final_top_n)
     retrieved_chunks = []
-    for r in ranked:
+    for i, r in enumerate(ranked):
         chunk = candidate_list[r["index"]]
+        if i < NEIGHBOR_EXPANSION_COUNT:
+            chunk = _expand_with_neighbors(chunk, arxiv_id, collection_id)
         retrieved_chunks.append({**chunk, "relevance_score": r["relevance_score"]})
 
     evidence_sufficient = bool(retrieved_chunks) and retrieved_chunks[0]["relevance_score"] >= RELEVANCE_FLOOR

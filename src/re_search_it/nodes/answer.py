@@ -10,7 +10,11 @@ from re_search_it.nodes.retrieve_chunks import RELEVANCE_FLOOR
 from re_search_it.state import PaperState
 from re_search_it.tools.cohere_client import answer_question
 
-TOP_N_FOR_ANSWER = 4
+# retrieve_chunks.py already curates the right number for the question's
+# complexity (5 direct / 8 decomposed, some neighbor-expanded into wider
+# passages) -- this just needs to be >= its largest output so answer
+# generation doesn't re-truncate evidence retrieval deliberately kept.
+TOP_N_FOR_ANSWER = 8
 HIGH_CONFIDENCE_FLOOR = 0.4
 
 

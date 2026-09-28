@@ -29,10 +29,44 @@ _PRIORITY_SECTIONS = [
     "limitations",
 ]
 
+# Bibliography text -- never useful to the summarizer (it's not paper
+# content), and previously it was leaking in via the priority list's
+# catch-all "append every remaining section" fallback, silently eating half
+# the character budget on some papers.
+_EXCLUDED_SECTIONS = {"references"}
 
-def _build_sections_text(sections: dict[str, str]) -> str:
-    ordered_names = [s for s in _PRIORITY_SECTIONS if s in sections]
-    ordered_names += [s for s in sections if s not in ordered_names]
+
+def _sample_start_middle_end(text: str, budget: int) -> str:
+    """When section-splitting failed to find real structure, everything
+    landed in one giant blob (usually "preamble") -- naive truncation from
+    the start only ever shows the abstract/intro. Limitations and
+    conclusions typically sit near the end, just before the references, so
+    sampling the beginning, middle, AND end gives the model a shot at all
+    three instead of just the first ~6% of the paper.
+    """
+    if len(text) <= budget:
+        return text
+
+    third = budget // 3
+    mid_point = len(text) // 2
+    start = text[:third]
+    middle = text[mid_point - third // 2 : mid_point + third // 2]
+    end = text[-third:]
+    return f"{start}\n\n[... middle of paper omitted ...]\n\n{middle}\n\n[... omitted ...]\n\n{end}"
+
+
+def _build_sections_text(sections: dict[str, str], structure_degraded: bool = False) -> str:
+    usable = {k: v for k, v in sections.items() if k not in _EXCLUDED_SECTIONS}
+
+    if structure_degraded:
+        # Section labels aren't trustworthy here (most/all text landed in
+        # one bucket) -- sample across the whole body instead of trusting
+        # section order to put the important parts first.
+        combined = "\n\n".join(usable.values())
+        return _sample_start_middle_end(combined, MAX_SECTIONS_CHARS)
+
+    ordered_names = [s for s in _PRIORITY_SECTIONS if s in usable]
+    ordered_names += [s for s in usable if s not in ordered_names]
 
     parts = []
     remaining = MAX_SECTIONS_CHARS
@@ -40,7 +74,7 @@ def _build_sections_text(sections: dict[str, str]) -> str:
         if remaining <= 0:
             break
         cap = min(MAX_CHARS_PER_SECTION, remaining)
-        body = sections[name][:cap]
+        body = usable[name][:cap]
         parts.append(f"## {name}\n{body}")
         remaining -= len(body)
 
@@ -49,7 +83,7 @@ def _build_sections_text(sections: dict[str, str]) -> str:
 
 def summarize(state: PaperState) -> PaperState:
     paper = state["selected_paper"]
-    sections_text = _build_sections_text(state["parsed_sections"])
+    sections_text = _build_sections_text(state["parsed_sections"], state.get("structure_degraded", False))
 
     try:
         briefing = summarize_paper(paper["title"], paper["authors"], sections_text)

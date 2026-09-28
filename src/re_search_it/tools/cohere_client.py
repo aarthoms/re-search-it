@@ -162,6 +162,13 @@ contain at least one item. Base every field ONLY on the paper text given
 below -- if a section you'd need wasn't included in the excerpt, don't
 guess at its content.
 
+follow_up_questions specifically: each one MUST be answerable from THIS
+paper's own text (e.g. about its method, dataset, results, or stated
+limitations) -- never a question that requires comparing against a
+different paper/tool the excerpt doesn't mention (e.g. "how does this
+compare to Julia?" when Julia is never discussed). A question this paper
+can't answer is a bad demo of the QA feature, not a good one.
+
 For limitations specifically: use ONLY what the paper itself states. If (and
 only if) the paper states none at all, you may add at most 1-2 defensible
 ones inferred from its scope (e.g. dataset size, domain, evaluation setup) --
@@ -306,6 +313,19 @@ Distinguish, in your wording, between:
 
 Do not blur these together -- an inference presented as a stated fact is a
 grounding failure even if the inference is reasonable.
+
+Two additional rules, because getting these wrong is worse than an
+unanswered question:
+- Only attribute a number/result to a specific workload, model, or
+  experiment if the SAME excerpt actually names that workload. A paper-wide
+  or different-experiment's figure ("20x-180x speedup on kernel X") must
+  never be presented as if it were the result for whatever the question
+  asked about, even if it's the only number in the evidence.
+- Always say whether a number is something the authors MEASURED
+  themselves, something they PROJECTED/ESTIMATED (e.g. "calibrated from
+  published benchmarks"), or something CITED from another source -- if the
+  evidence doesn't make this clear, say the provenance is unclear rather
+  than presenting it as a measured result by default.
 
 Evidence:
 {evidence}

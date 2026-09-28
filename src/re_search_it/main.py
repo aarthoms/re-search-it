@@ -200,6 +200,14 @@ def _print_parse_summary(result: dict) -> None:
             "built from the arXiv abstract ONLY, not the full text."
         )
         print(f"\n  {_c(_WARN, degraded_msg)}")
+    elif result.get("structure_degraded"):
+        structure_msg = (
+            "! This paper's section headings weren't recognized -- most of the text "
+            "landed in one unlabeled block. The briefing samples across the whole "
+            "paper instead of by section, and QA section hints/citations will be "
+            "less precise."
+        )
+        print(f"\n  {_c(_WARN, structure_msg)}")
 
     chunk_line = (
         f"Chunked & embedded: {result.get('chunk_count', 0)} chunks -> "
