@@ -136,7 +136,7 @@ def _run_conversation(qa_graph, paper_state: dict, active_paper_title: str, conv
         if i == 0:
             standalone_query, mode = turn["q"], "qa"
         else:
-            def _route():
+            def _route(turn=turn, raw_log=raw_log):
                 return route_top_level(turn["q"], raw_log[:-1], active_paper_title, [])
 
             try:
@@ -155,7 +155,7 @@ def _run_conversation(qa_graph, paper_state: dict, active_paper_title: str, conv
 
         item = {**turn, "id": f"{conv['id']}#{i}", "difficulty": conv["difficulty"], "stress": conv.get("stress", [])}
 
-        def _invoke():
+        def _invoke(standalone_query=standalone_query, history=history):
             return _run_qa(qa_graph, paper_state, standalone_query, history)
 
         try:
@@ -203,7 +203,7 @@ def _print_metrics_block(title: str, metrics: dict) -> None:
         return
     print(f"\n{_c(_HEADER, title)}")
     for key in ("n", "pass_rate", "refusal_accuracy", "false_refusal_rate", "hallucination_rate",
-                "mean_keyword_score", "section_hit_rate", "grounded_rate", "mean_latency_s"):
+                "mean_keyword_score", "section_hit_rate", "evidence_above_threshold_rate", "mean_latency_s"):
         if key in metrics and metrics[key] is not None:
             val = metrics[key]
             print(f"  {key}: {val:.3f}" if isinstance(val, float) else f"  {key}: {val}")
@@ -303,9 +303,9 @@ def main() -> None:
             match = next((it for it in single_items if it["id"] == args.repeat_check), None)
             if match:
                 print(_c(_DIM, f"\nDeterminism check on {args.repeat_check}..."))
-                r1, _ = _with_retry(lambda: _run_qa(qa_graph, paper_state, match["q"], []), delay=args.delay)
+                r1, _ = _with_retry(lambda ps=paper_state, m=match: _run_qa(qa_graph, ps, m["q"], []), delay=args.delay)
                 time.sleep(args.delay)
-                r2, _ = _with_retry(lambda: _run_qa(qa_graph, paper_state, match["q"], []), delay=args.delay)
+                r2, _ = _with_retry(lambda ps=paper_state, m=match: _run_qa(qa_graph, ps, m["q"], []), delay=args.delay)
                 identical = r1["answer"]["text"] == r2["answer"]["text"]
                 print(_c(_GREEN if identical else _WARN, f"  identical: {identical}"))
 

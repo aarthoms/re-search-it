@@ -150,10 +150,12 @@ activemq-data/
 # Local persisted data (ChromaDB, etc.)
 data/
 
-# Eval harness results (timestamped runs), except the latest summary
+# Eval harness results (timestamped runs), except the latest summary and the
+# one JSON run that eval.md's analysis cites as evidence
 eval/results/*
 !eval/results/latest.md
 !eval/results/latest.csv
+!eval/results/20260928T074603Z.json
 
 # Environments
 .env

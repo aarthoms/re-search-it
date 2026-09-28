@@ -1,0 +1,1253 @@
+{
+  "results": [
+    {
+      "id": "e-layers",
+      "difficulty": "easy",
+      "stress": [],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": true,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 3.0767848000000413,
+      "answer_text": "The evidence explicitly states that both the encoder and decoder are composed of a stack of **N = 6 identical layers** (Encoder and Decoder Stacks). This applies to the model architecture described, and there is no separate mention of a different number of layers for the \"base model\" specifically. Therefore, the base model uses **6 encoder layers and 6 decoder layers**.",
+      "sources": [
+        {
+          "section": "encoder and decoder stacks",
+          "chunk_id": "1706.03762v7_encoder and decoder stacks_0"
+        },
+        {
+          "section": "regularization",
+          "chunk_id": "1706.03762v7_regularization_0"
+        },
+        {
+          "section": "model architecture",
+          "chunk_id": "1706.03762v7_model architecture_0"
+        },
+        {
+          "section": "applications of attention in our model",
+          "chunk_id": "1706.03762v7_applications of attention in our model_0"
+        },
+        {
+          "section": "position-wise feed-forward networks",
+          "chunk_id": "1706.03762v7_position-wise feed-forward networks_0"
+        }
+      ]
+    },
+    {
+      "id": "e-heads",
+      "difficulty": "easy",
+      "stress": [],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": true,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 2.865844500000094,
+      "answer_text": "The base model uses **8** attention heads. This is explicitly stated in the evidence: \"In this work we employ h = 8 parallel attention layers, or heads\" (multi-head attention).",
+      "sources": [
+        {
+          "section": "multi-head attention",
+          "chunk_id": "1706.03762v7_multi-head attention_1"
+        },
+        {
+          "section": "multi-head attention",
+          "chunk_id": "1706.03762v7_multi-head attention_0"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_1"
+        },
+        {
+          "section": "applications of attention in our model",
+          "chunk_id": "1706.03762v7_applications of attention in our model_0"
+        },
+        {
+          "section": "why self-attention",
+          "chunk_id": "1706.03762v7_why self-attention_2"
+        }
+      ]
+    },
+    {
+      "id": "e-optimizer",
+      "difficulty": "easy",
+      "stress": [],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": true,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 2.917323900000042,
+      "answer_text": "The authors explicitly state that they used the **Adam optimizer** with specific hyperparameters: \u03b21 = 0.9, \u03b22 = 0.98, and \u03f5 = 10\u22129 (Optimizer).",
+      "sources": [
+        {
+          "section": "optimizer",
+          "chunk_id": "1706.03762v7_optimizer_0"
+        },
+        {
+          "section": "hardware and schedule",
+          "chunk_id": "1706.03762v7_hardware and schedule_0"
+        },
+        {
+          "section": "machine translation",
+          "chunk_id": "1706.03762v7_machine translation_1"
+        },
+        {
+          "section": "training data and batching",
+          "chunk_id": "1706.03762v7_training data and batching_0"
+        },
+        {
+          "section": "machine translation",
+          "chunk_id": "1706.03762v7_machine translation_0"
+        }
+      ]
+    },
+    {
+      "id": "e-bleu-ende",
+      "difficulty": "easy",
+      "stress": [],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": true,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 3.3023306999999704,
+      "answer_text": "The big Transformer model achieved a BLEU score of **28.4** on the WMT 2014 English-to-German translation task (Abstract, [machine translation], [regularization]). This score is explicitly stated in the evidence and is a measured result by the authors.",
+      "sources": [
+        {
+          "section": "machine translation",
+          "chunk_id": "1706.03762v7_machine translation_0"
+        },
+        {
+          "section": "abstract",
+          "chunk_id": "1706.03762v7_abstract_0"
+        },
+        {
+          "section": "regularization",
+          "chunk_id": "1706.03762v7_regularization_0"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_0"
+        },
+        {
+          "section": "conclusion",
+          "chunk_id": "1706.03762v7_conclusion_0"
+        }
+      ]
+    },
+    {
+      "id": "e-dropout",
+      "difficulty": "easy",
+      "stress": [],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": true,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 5.329477300000008,
+      "answer_text": "The dropout rate used for the base model is explicitly stated as **Pdrop = 0.1** in the [regularization] section. This rate is applied to the output of each sub-layer, the sums of the embeddings, and the positional encodings in both the encoder and decoder stacks.",
+      "sources": [
+        {
+          "section": "regularization",
+          "chunk_id": "1706.03762v7_regularization_1"
+        },
+        {
+          "section": "regularization",
+          "chunk_id": "1706.03762v7_regularization_0"
+        },
+        {
+          "section": "machine translation",
+          "chunk_id": "1706.03762v7_machine translation_0"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_0"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_2"
+        }
+      ]
+    },
+    {
+      "id": "e-oos-imagenet",
+      "difficulty": "easy",
+      "stress": [],
+      "answerable": false,
+      "refused": true,
+      "forbidden_hit": false,
+      "keyword_score": null,
+      "section_hit": null,
+      "grounded": false,
+      "confidence": "low",
+      "passed": true,
+      "latency_s": 5.263018999999986,
+      "answer_text": "(Low-confidence -- the best evidence I found scored 0.05 relevance, below what I'd normally trust.)\n\nThe evidence provided does not mention any results or experiments related to ImageNet or top-1 accuracy. The paper focuses on machine translation tasks, specifically English-to-German and English-to-French, using the WMT 2014 dataset, and reports BLEU scores as the evaluation metric. There is no information about ImageNet or top-1 accuracy in the given excerpts.",
+      "sources": [
+        {
+          "section": "regularization",
+          "chunk_id": "1706.03762v7_regularization_0"
+        },
+        {
+          "section": "hardware and schedule",
+          "chunk_id": "1706.03762v7_hardware and schedule_0"
+        },
+        {
+          "section": "machine translation",
+          "chunk_id": "1706.03762v7_machine translation_1"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_1"
+        },
+        {
+          "section": "machine translation",
+          "chunk_id": "1706.03762v7_machine translation_0"
+        }
+      ]
+    },
+    {
+      "id": "m-schedule",
+      "difficulty": "medium",
+      "stress": [],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": true,
+      "grounded": true,
+      "confidence": "medium",
+      "passed": true,
+      "latency_s": 4.476214899999945,
+      "answer_text": "The learning-rate schedule is explicitly described in the [optimizer] section. It follows the formula:  \n**lrate = d<sup>-0.5</sup> \u00b7 min(step_num<sup>-0.5</sup>, step_num \u00b7 warmup_steps<sup>-1.5</sup>)**,  \nwhere **warmup_steps = 4000**. This schedule increases the learning rate **linearly** for the first **4000 steps** (warmup phase) and then **decreases it proportionally to the inverse square root of the step number** thereafter.  \n\nThe paper explicitly states this is a **measured and implemented schedule** used in their training regime. No projections or citations are involved.",
+      "sources": [
+        {
+          "section": "optimizer",
+          "chunk_id": "1706.03762v7_optimizer_0"
+        },
+        {
+          "section": "training",
+          "chunk_id": "1706.03762v7_training_0"
+        },
+        {
+          "section": "hardware and schedule",
+          "chunk_id": "1706.03762v7_hardware and schedule_0"
+        },
+        {
+          "section": "regularization",
+          "chunk_id": "1706.03762v7_regularization_1"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_1"
+        }
+      ]
+    },
+    {
+      "id": "m-train-time",
+      "difficulty": "medium",
+      "stress": [],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": true,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 5.096074000000044,
+      "answer_text": "According to the evidence (hardware and schedule), the base models were trained for a total of **100,000 steps or 12 hours** on **one machine with 8 NVIDIA P100 GPUs**. Each training step for the base models took about **0.4 seconds**. The big models, on the other hand, were trained for **300,000 steps (3.5 days)** on the **same hardware**, with each training step taking **1.0 second**. \n\nAdditionally, the evidence (machine translation) confirms that the big model for English-to-French translation was trained for **3.5 days on 8 P100 GPUs**, consistent with the hardware and schedule section.",
+      "sources": [
+        {
+          "section": "hardware and schedule",
+          "chunk_id": "1706.03762v7_hardware and schedule_0"
+        },
+        {
+          "section": "machine translation",
+          "chunk_id": "1706.03762v7_machine translation_0"
+        },
+        {
+          "section": "regularization",
+          "chunk_id": "1706.03762v7_regularization_0"
+        },
+        {
+          "section": "abstract",
+          "chunk_id": "1706.03762v7_abstract_0"
+        },
+        {
+          "section": "regularization",
+          "chunk_id": "1706.03762v7_regularization_1"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_2"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_0"
+        },
+        {
+          "section": "training",
+          "chunk_id": "1706.03762v7_training_0"
+        }
+      ]
+    },
+    {
+      "id": "m-scaling",
+      "difficulty": "medium",
+      "stress": [],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": true,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 3.8548752000000377,
+      "answer_text": "The paper explicitly states that the dot products are scaled by \\(1/\\sqrt{d_k}\\) in scaled dot-product attention to counteract the effect of large dot products when \\(d_k\\) (the dimension of the keys) is large. Specifically, the paper explains that for large values of \\(d_k\\), the dot products grow large in magnitude, pushing the softmax function into regions where it has extremely small gradients (Section: [scaled dot-product attention]). This scaling factor helps stabilize the gradients during training, though the paper does not provide measured results or specific experiments to quantify this effect. The reasoning is based on theoretical considerations rather than empirical measurements.",
+      "sources": [
+        {
+          "section": "scaled dot-product attention",
+          "chunk_id": "1706.03762v7_scaled dot-product attention_1"
+        },
+        {
+          "section": "scaled dot-product attention",
+          "chunk_id": "1706.03762v7_scaled dot-product attention_0"
+        },
+        {
+          "section": "multi-head attention",
+          "chunk_id": "1706.03762v7_multi-head attention_0"
+        },
+        {
+          "section": "applications of attention in our model",
+          "chunk_id": "1706.03762v7_applications of attention in our model_1"
+        },
+        {
+          "section": "attention",
+          "chunk_id": "1706.03762v7_attention_0"
+        }
+      ]
+    },
+    {
+      "id": "m-enc-dec-attn",
+      "difficulty": "medium",
+      "stress": [],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": true,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 3.0220372999999654,
+      "answer_text": "In encoder-decoder attention, the **queries come from the previous decoder layer**, and the **keys and values come from the output of the encoder** (Applications of attention in our model). This setup allows every position in the decoder to attend over all positions in the input sequence, mimicking typical encoder-decoder attention mechanisms in sequence-to-sequence models.",
+      "sources": [
+        {
+          "section": "applications of attention in our model",
+          "chunk_id": "1706.03762v7_applications of attention in our model_0"
+        },
+        {
+          "section": "attention",
+          "chunk_id": "1706.03762v7_attention_0"
+        },
+        {
+          "section": "model architecture",
+          "chunk_id": "1706.03762v7_model architecture_0"
+        },
+        {
+          "section": "encoder and decoder stacks",
+          "chunk_id": "1706.03762v7_encoder and decoder stacks_0"
+        },
+        {
+          "section": "encoder and decoder stacks",
+          "chunk_id": "1706.03762v7_encoder and decoder stacks_1"
+        }
+      ]
+    },
+    {
+      "id": "m-beam",
+      "difficulty": "medium",
+      "stress": [],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": true,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 4.2156563000000915,
+      "answer_text": "The paper states that during inference, they used a beam size of 4 and a length penalty \u03b1 = 0.6 for both the English-to-German and English-to-French translation tasks (machine translation sections). For the English constituency parsing task, they used a beam size of 21 and \u03b1 = 0.3 for both the WSJ-only and semi-supervised settings (English constituency parsing sections).",
+      "sources": [
+        {
+          "section": "machine translation",
+          "chunk_id": "1706.03762v7_machine translation_1"
+        },
+        {
+          "section": "machine translation",
+          "chunk_id": "1706.03762v7_machine translation_0"
+        },
+        {
+          "section": "english constituency parsing",
+          "chunk_id": "1706.03762v7_english constituency parsing_1"
+        },
+        {
+          "section": "english constituency parsing",
+          "chunk_id": "1706.03762v7_english constituency parsing_0"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_1"
+        }
+      ]
+    },
+    {
+      "id": "m-pos-enc",
+      "difficulty": "medium",
+      "stress": [],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": true,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 5.32136909999997,
+      "answer_text": "Yes, the authors experimented with using learned positional embeddings instead of sinusoidal ones (Positional Encoding). They found that the two versions produced nearly identical results, as indicated in Table 3 row (E) (Model Variations). Specifically, the learned positional embeddings yielded a BLEU score of 25.7, which is the same as the sinusoidal version (Model Variations). The paper implies that the choice between sinusoidal and learned positional embeddings does not significantly impact model performance, though it isn't stated directly. The authors ultimately chose the sinusoidal version because it may allow the model to extrapolate to sequence lengths longer than those encountered during training (Positional Encoding).",
+      "sources": [
+        {
+          "section": "positional encoding",
+          "chunk_id": "1706.03762v7_positional encoding_1"
+        },
+        {
+          "section": "positional encoding",
+          "chunk_id": "1706.03762v7_positional encoding_0"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_2"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_1"
+        },
+        {
+          "section": "embeddings and softmax",
+          "chunk_id": "1706.03762v7_embeddings and softmax_0"
+        },
+        {
+          "section": "encoder and decoder stacks",
+          "chunk_id": "1706.03762v7_encoder and decoder stacks_0"
+        },
+        {
+          "section": "training",
+          "chunk_id": "1706.03762v7_training_0"
+        },
+        {
+          "section": "introduction",
+          "chunk_id": "1706.03762v7_introduction_0"
+        }
+      ]
+    },
+    {
+      "id": "m-data",
+      "difficulty": "medium",
+      "stress": [],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": true,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 8.743147099999987,
+      "answer_text": "For the English-to-German translation task, the authors used the **WMT 2014 English-German dataset**, which consists of about **4.5 million sentence pairs** (training data and batching). Sentences were encoded using **byte-pair encoding**, resulting in a **shared source-target vocabulary of approximately 37,000 tokens** (training data and batching).  \n\nThe evidence does not specify whether this vocabulary size was measured, projected, or cited from another source.",
+      "sources": [
+        {
+          "section": "training data and batching",
+          "chunk_id": "1706.03762v7_training data and batching_0"
+        },
+        {
+          "section": "english constituency parsing",
+          "chunk_id": "1706.03762v7_english constituency parsing_0"
+        },
+        {
+          "section": "abstract",
+          "chunk_id": "1706.03762v7_abstract_0"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_0"
+        },
+        {
+          "section": "conclusion",
+          "chunk_id": "1706.03762v7_conclusion_0"
+        }
+      ]
+    },
+    {
+      "id": "m-oos-glue",
+      "difficulty": "medium",
+      "stress": [],
+      "answerable": false,
+      "refused": true,
+      "forbidden_hit": false,
+      "keyword_score": null,
+      "section_hit": null,
+      "grounded": false,
+      "confidence": "low",
+      "passed": true,
+      "latency_s": 4.229437100000041,
+      "answer_text": "(Low-confidence -- the best evidence I found scored 0.10 relevance, below what I'd normally trust.)\n\nThe evidence provided does not mention the GLUE benchmark or any results related to it. Therefore, the paper does not cover the model's performance on the GLUE benchmark.",
+      "sources": [
+        {
+          "section": "hardware and schedule",
+          "chunk_id": "1706.03762v7_hardware and schedule_0"
+        },
+        {
+          "section": "machine translation",
+          "chunk_id": "1706.03762v7_machine translation_1"
+        },
+        {
+          "section": "machine translation",
+          "chunk_id": "1706.03762v7_machine translation_0"
+        },
+        {
+          "section": "abstract",
+          "chunk_id": "1706.03762v7_abstract_0"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_0"
+        }
+      ]
+    },
+    {
+      "id": "h-table-heads",
+      "difficulty": "hard",
+      "stress": [
+        "table"
+      ],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": true,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 3.429975000000013,
+      "answer_text": "In the model-variations experiments, single-head attention achieved a BLEU score of **24.9**, which is **0.9 BLEU worse** than the base model's BLEU score of **25.8** (Table 3, row (A)). This is explicitly stated in the evidence: \"While single-head attention is 0.9 BLEU worse than the best setting...\" (Model Variations).",
+      "sources": [
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_1"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_0"
+        },
+        {
+          "section": "multi-head attention",
+          "chunk_id": "1706.03762v7_multi-head attention_1"
+        },
+        {
+          "section": "multi-head attention",
+          "chunk_id": "1706.03762v7_multi-head attention_0"
+        },
+        {
+          "section": "why self-attention",
+          "chunk_id": "1706.03762v7_why self-attention_2"
+        }
+      ]
+    },
+    {
+      "id": "h-table-params",
+      "difficulty": "hard",
+      "stress": [
+        "table"
+      ],
+      "answerable": true,
+      "refused": true,
+      "forbidden_hit": false,
+      "keyword_score": 0.5,
+      "section_hit": true,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 3.7775684999999157,
+      "answer_text": "The evidence explicitly states that the base model has 65 million parameters (Table 3, \"base\" row). However, the number of parameters for the big model is not explicitly stated in the provided excerpts. The paper mentions the configuration of the big model is listed in the bottom line of Table 3, but the actual parameter count for the big model is not included in the evidence provided. \n\n- **Base model parameters**: 65 million (stated in Table 3, \"base\" row).  \n- **Big model parameters**: Not specified in the evidence.",
+      "sources": [
+        {
+          "section": "hardware and schedule",
+          "chunk_id": "1706.03762v7_hardware and schedule_0"
+        },
+        {
+          "section": "machine translation",
+          "chunk_id": "1706.03762v7_machine translation_0"
+        },
+        {
+          "section": "regularization",
+          "chunk_id": "1706.03762v7_regularization_0"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_2"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_0"
+        }
+      ]
+    },
+    {
+      "id": "h-table-flops",
+      "difficulty": "hard",
+      "stress": [
+        "table",
+        "numeric-reasoning"
+      ],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": true,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 2.734929399999942,
+      "answer_text": "The training cost in FLOPs of the big Transformer model on the English-to-German task is **2.3\u00b710^19** (Regularization). This number is explicitly stated in the evidence and is attributed to the big model's performance on the English-to-German task.",
+      "sources": [
+        {
+          "section": "machine translation",
+          "chunk_id": "1706.03762v7_machine translation_0"
+        },
+        {
+          "section": "regularization",
+          "chunk_id": "1706.03762v7_regularization_0"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_0"
+        },
+        {
+          "section": "abstract",
+          "chunk_id": "1706.03762v7_abstract_0"
+        },
+        {
+          "section": "training data and batching",
+          "chunk_id": "1706.03762v7_training data and batching_0"
+        }
+      ]
+    },
+    {
+      "id": "h-when-faster",
+      "difficulty": "hard",
+      "stress": [
+        "multi-hop"
+      ],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": true,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 6.587525300000038,
+      "answer_text": "According to the evidence (Why self-attention), a self-attention layer is computationally faster than a recurrent layer when the sequence length \\( n \\) is smaller than the representation dimensionality \\( d \\). This condition is stated explicitly:\n\n> In terms of computational complexity, self-attention layers are faster than recurrent layers when the sequence length \\( n \\) is smaller than the representation dimensionality \\( d \\), which is most often the case with sentence representations used by state-of-the-art models in machine translations.\n\nRegarding the maximum path length, the evidence states that a self-attention layer connects all positions with a constant number of sequentially executed operations, resulting in a maximum path length of \\( O(1) \\). In contrast, a recurrent layer requires \\( O(n) \\) sequential operations and has a maximum path length of \\( O(n) \\). This comparison is explicitly provided in Table 1:\n\n> Table 1: Maximum path lengths, per-layer complexity and minimum number of sequential operations for different layer types.  \n> Layer Type | Complexity per Layer | Sequential Operations | Maximum Path Length  \n> Self-Attention | \\( O(n^2 \\cdot d) \\) | \\( O(1) \\) | \\( O(1) \\)  \n> Recurrent | \\( O(n \\cdot d^2) \\) | \\( O(n) \\) | \\( O(n) \\)  \n\nThus, under the condition \\( n < d \\), a self-attention layer is computationally faster than a recurrent layer, and its maximum path length is significantly shorter (\\( O(1) \\) vs. \\( O(n) \\)).",
+      "sources": [
+        {
+          "section": "why self-attention",
+          "chunk_id": "1706.03762v7_why self-attention_1"
+        },
+        {
+          "section": "why self-attention",
+          "chunk_id": "1706.03762v7_why self-attention_0"
+        },
+        {
+          "section": "why self-attention",
+          "chunk_id": "1706.03762v7_why self-attention_2"
+        },
+        {
+          "section": "embeddings and softmax",
+          "chunk_id": "1706.03762v7_embeddings and softmax_0"
+        },
+        {
+          "section": "background",
+          "chunk_id": "1706.03762v7_background_0"
+        },
+        {
+          "section": "conclusion",
+          "chunk_id": "1706.03762v7_conclusion_0"
+        },
+        {
+          "section": "background",
+          "chunk_id": "1706.03762v7_background_1"
+        },
+        {
+          "section": "applications of attention in our model",
+          "chunk_id": "1706.03762v7_applications of attention in our model_0"
+        }
+      ]
+    },
+    {
+      "id": "h-margin",
+      "difficulty": "hard",
+      "stress": [
+        "numeric-reasoning"
+      ],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": true,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 4.77380519999997,
+      "answer_text": "The big Transformer model outperformed the best previously reported models, including ensembles, by more than 2.0 BLEU on the WMT 2014 English-to-German translation task, achieving a new state-of-the-art BLEU score of 28.4. (machine translation, abstract, conclusion)",
+      "sources": [
+        {
+          "section": "machine translation",
+          "chunk_id": "1706.03762v7_machine translation_0"
+        },
+        {
+          "section": "abstract",
+          "chunk_id": "1706.03762v7_abstract_0"
+        },
+        {
+          "section": "conclusion",
+          "chunk_id": "1706.03762v7_conclusion_0"
+        },
+        {
+          "section": "regularization",
+          "chunk_id": "1706.03762v7_regularization_0"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_0"
+        },
+        {
+          "section": "english constituency parsing",
+          "chunk_id": "1706.03762v7_english constituency parsing_0"
+        },
+        {
+          "section": "training data and batching",
+          "chunk_id": "1706.03762v7_training data and batching_0"
+        },
+        {
+          "section": "hardware and schedule",
+          "chunk_id": "1706.03762v7_hardware and schedule_0"
+        }
+      ]
+    },
+    {
+      "id": "h-parsing-setup",
+      "difficulty": "hard",
+      "stress": [
+        "multi-hop"
+      ],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": true,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 5.913211300000057,
+      "answer_text": "For English constituency parsing, the authors used a **4-layer Transformer with dmodel = 1024** (stated in the \"English constituency parsing\" section). \n\n- In the **WSJ-only setting**, they achieved an **F1 score of 91.3** (stated in the \"English constituency parsing\" section, Table 4).  \n- In the **semi-supervised setting**, they achieved an **F1 score of 92.7** (stated in the \"English constituency parsing\" section, Table 4).  \n\nBoth results are measured on Section 23 of the WSJ portion of the Penn Treebank, and the F1 scores are reported as measured by the authors.",
+      "sources": [
+        {
+          "section": "english constituency parsing",
+          "chunk_id": "1706.03762v7_english constituency parsing_1"
+        },
+        {
+          "section": "english constituency parsing",
+          "chunk_id": "1706.03762v7_english constituency parsing_0"
+        },
+        {
+          "section": "english constituency parsing",
+          "chunk_id": "1706.03762v7_english constituency parsing_2"
+        },
+        {
+          "section": "abstract",
+          "chunk_id": "1706.03762v7_abstract_1"
+        },
+        {
+          "section": "regularization",
+          "chunk_id": "1706.03762v7_regularization_0"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_0"
+        },
+        {
+          "section": "training data and batching",
+          "chunk_id": "1706.03762v7_training data and batching_0"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_1"
+        }
+      ]
+    },
+    {
+      "id": "h-false-premise-learned",
+      "difficulty": "hard",
+      "stress": [
+        "false-premise"
+      ],
+      "answerable": true,
+      "refused": true,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": true,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 3.9599319999999807,
+      "answer_text": "The evidence does not explicitly state that the authors chose learned positional embeddings for their final model. Instead, it mentions that they experimented with both learned positional embeddings and sinusoidal positional encodings, finding that the two versions produced nearly identical results (see Table 3 row (E)) (Model Variations). The authors ultimately chose the sinusoidal version because it may allow the model to extrapolate to sequence lengths longer than those encountered during training (Positional Encoding). \n\nThus, the evidence does not support the claim that learned positional embeddings were chosen for the final model. Instead, it indicates that sinusoidal positional encodings were selected for their potential extrapolation benefits.",
+      "sources": [
+        {
+          "section": "positional encoding",
+          "chunk_id": "1706.03762v7_positional encoding_0"
+        },
+        {
+          "section": "positional encoding",
+          "chunk_id": "1706.03762v7_positional encoding_1"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_2"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_1"
+        },
+        {
+          "section": "embeddings and softmax",
+          "chunk_id": "1706.03762v7_embeddings and softmax_0"
+        }
+      ]
+    },
+    {
+      "id": "h-false-premise-gpt4",
+      "difficulty": "hard",
+      "stress": [
+        "false-premise"
+      ],
+      "answerable": false,
+      "refused": true,
+      "forbidden_hit": false,
+      "keyword_score": null,
+      "section_hit": null,
+      "grounded": true,
+      "confidence": "medium",
+      "passed": true,
+      "latency_s": 6.448226900000009,
+      "answer_text": "The evidence provided does not mention GPT-4 or the MMLU benchmark. Therefore, it is not possible to determine why the Transformer might have outperformed GPT-4 on MMLU based on the given excerpts. The evidence focuses on the Transformer's performance on tasks like machine translation (English-to-German, English-to-French) and English constituency parsing, but does not discuss GPT-4 or MMLU.",
+      "sources": [
+        {
+          "section": "background",
+          "chunk_id": "1706.03762v7_background_1"
+        },
+        {
+          "section": "regularization",
+          "chunk_id": "1706.03762v7_regularization_0"
+        },
+        {
+          "section": "english constituency parsing",
+          "chunk_id": "1706.03762v7_english constituency parsing_1"
+        },
+        {
+          "section": "abstract",
+          "chunk_id": "1706.03762v7_abstract_0"
+        },
+        {
+          "section": "machine translation",
+          "chunk_id": "1706.03762v7_machine translation_0"
+        },
+        {
+          "section": "conclusion",
+          "chunk_id": "1706.03762v7_conclusion_0"
+        },
+        {
+          "section": "introduction",
+          "chunk_id": "1706.03762v7_introduction_1"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_0"
+        }
+      ]
+    },
+    {
+      "id": "h-near-miss-enro",
+      "difficulty": "hard",
+      "stress": [
+        "near-miss-oos"
+      ],
+      "answerable": false,
+      "refused": true,
+      "forbidden_hit": false,
+      "keyword_score": null,
+      "section_hit": null,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 4.263863600000036,
+      "answer_text": "The evidence provided does not mention any results for the WMT 2016 English-to-Romanian task. The excerpts focus on the WMT 2014 English-to-German and English-to-French tasks, as well as English constituency parsing. Therefore, the BLEU score for the WMT 2016 English-to-Romanian task is not covered in the evidence.",
+      "sources": [
+        {
+          "section": "regularization",
+          "chunk_id": "1706.03762v7_regularization_0"
+        },
+        {
+          "section": "machine translation",
+          "chunk_id": "1706.03762v7_machine translation_0"
+        },
+        {
+          "section": "english constituency parsing",
+          "chunk_id": "1706.03762v7_english constituency parsing_1"
+        },
+        {
+          "section": "abstract",
+          "chunk_id": "1706.03762v7_abstract_0"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_0"
+        }
+      ]
+    },
+    {
+      "id": "h-near-miss-memory",
+      "difficulty": "hard",
+      "stress": [
+        "near-miss-oos"
+      ],
+      "answerable": false,
+      "refused": true,
+      "forbidden_hit": false,
+      "keyword_score": null,
+      "section_hit": null,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 3.2240863000000672,
+      "answer_text": "The evidence provided does not explicitly state the amount of GPU memory each P100 had in the training setup. The excerpts mention the use of 8 NVIDIA P100 GPUs and provide details about training times, steps, and model configurations, but they do not specify the GPU memory capacity. Therefore, the question cannot be answered based on the given evidence.",
+      "sources": [
+        {
+          "section": "hardware and schedule",
+          "chunk_id": "1706.03762v7_hardware and schedule_0"
+        },
+        {
+          "section": "machine translation",
+          "chunk_id": "1706.03762v7_machine translation_0"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_0"
+        },
+        {
+          "section": "machine translation",
+          "chunk_id": "1706.03762v7_machine translation_1"
+        },
+        {
+          "section": "background",
+          "chunk_id": "1706.03762v7_background_0"
+        }
+      ]
+    },
+    {
+      "id": "conv-easy-optim#0",
+      "difficulty": "easy",
+      "stress": [],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": null,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 2.6349787000000333,
+      "answer_text": "The authors explicitly state that they used the **Adam optimizer** with specific hyperparameters: \u03b21 = 0.9, \u03b22 = 0.98, and \u03f5 = 10\u22129. This is detailed in the \"[optimizer]\" section.",
+      "sources": [
+        {
+          "section": "optimizer",
+          "chunk_id": "1706.03762v7_optimizer_0"
+        },
+        {
+          "section": "hardware and schedule",
+          "chunk_id": "1706.03762v7_hardware and schedule_0"
+        },
+        {
+          "section": "machine translation",
+          "chunk_id": "1706.03762v7_machine translation_1"
+        },
+        {
+          "section": "machine translation",
+          "chunk_id": "1706.03762v7_machine translation_0"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_1"
+        }
+      ],
+      "routing_mode": "qa",
+      "standalone_query": "What optimizer did they use?"
+    },
+    {
+      "id": "conv-easy-optim#1",
+      "difficulty": "easy",
+      "stress": [],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": null,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 3.257202199999938,
+      "answer_text": "The paper explicitly states that the authors used **warmup_steps = 4000** for the learning rate schedule. (optimizer)",
+      "sources": [
+        {
+          "section": "optimizer",
+          "chunk_id": "1706.03762v7_optimizer_0"
+        },
+        {
+          "section": "hardware and schedule",
+          "chunk_id": "1706.03762v7_hardware and schedule_0"
+        },
+        {
+          "section": "multi-head attention",
+          "chunk_id": "1706.03762v7_multi-head attention_1"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_1"
+        },
+        {
+          "section": "scaled dot-product attention",
+          "chunk_id": "1706.03762v7_scaled dot-product attention_0"
+        }
+      ],
+      "routing_mode": "qa",
+      "standalone_query": "How many warmup steps did the Attention Is All You Need paper use?"
+    },
+    {
+      "id": "conv-hard-bigmodel#0",
+      "difficulty": "hard",
+      "stress": [
+        "multi-turn"
+      ],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": null,
+      "grounded": true,
+      "confidence": "medium",
+      "passed": true,
+      "latency_s": 2.92461650000007,
+      "answer_text": "The model dimension \\( d_{\\text{model}} \\) of the base model is explicitly stated as **512** in the evidence (see [position-wise feed-forward networks]). This is directly mentioned in the context of the feed-forward network's input and output dimensionality: \"The dimensionality of input and output is \\( d_{\\text{model}} = 512 \\)\".",
+      "sources": [
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_0"
+        },
+        {
+          "section": "embeddings and softmax",
+          "chunk_id": "1706.03762v7_embeddings and softmax_0"
+        },
+        {
+          "section": "positional encoding",
+          "chunk_id": "1706.03762v7_positional encoding_0"
+        },
+        {
+          "section": "position-wise feed-forward networks",
+          "chunk_id": "1706.03762v7_position-wise feed-forward networks_0"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_2"
+        }
+      ],
+      "routing_mode": "qa",
+      "standalone_query": "What is the model dimension d_model of the base model?"
+    },
+    {
+      "id": "conv-hard-bigmodel#1",
+      "difficulty": "hard",
+      "stress": [
+        "multi-turn"
+      ],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": null,
+      "grounded": true,
+      "confidence": "medium",
+      "passed": true,
+      "latency_s": 3.353310400000055,
+      "answer_text": "The evidence explicitly states that for the big model, the model dimension \\( d_{\\text{model}} \\) is **1024** (found in the \"[model variations]\" section, specifically in the description of the big model configuration: \"big 6 1024 4096 16 0.3 300K\").",
+      "sources": [
+        {
+          "section": "embeddings and softmax",
+          "chunk_id": "1706.03762v7_embeddings and softmax_0"
+        },
+        {
+          "section": "machine translation",
+          "chunk_id": "1706.03762v7_machine translation_0"
+        },
+        {
+          "section": "hardware and schedule",
+          "chunk_id": "1706.03762v7_hardware and schedule_0"
+        },
+        {
+          "section": "multi-head attention",
+          "chunk_id": "1706.03762v7_multi-head attention_0"
+        },
+        {
+          "section": "model variations",
+          "chunk_id": "1706.03762v7_model variations_1"
+        }
+      ],
+      "routing_mode": "qa",
+      "standalone_query": "And for the big model, what is its model dimension d_model?"
+    },
+    {
+      "id": "conv-hard-bigmodel#2",
+      "difficulty": "hard",
+      "stress": [
+        "multi-turn"
+      ],
+      "answerable": true,
+      "refused": false,
+      "forbidden_hit": false,
+      "keyword_score": 1.0,
+      "section_hit": null,
+      "grounded": true,
+      "confidence": "high",
+      "passed": true,
+      "latency_s": 4.099739999999997,
+      "answer_text": "The training time for the models described in the paper varies depending on the model size. For the **base models**, training took **12 hours** (100,000 steps at 0.4 seconds per step) on one machine with 8 NVIDIA P100 GPUs (Hardware and Schedule). For the **big models**, training took **3.5 days** (300,000 steps at 1.0 second per step) on the same hardware setup (Hardware and Schedule). The paper also mentions that the Transformer model can reach state-of-the-art translation quality after being trained for **as little as twelve hours** on eight P100 GPUs (Introduction), though it is not explicitly stated whether this refers to the base or big models.",
+      "sources": [
+        {
+          "section": "hardware and schedule",
+          "chunk_id": "1706.03762v7_hardware and schedule_0"
+        },
+        {
+          "section": "introduction",
+          "chunk_id": "1706.03762v7_introduction_1"
+        },
+        {
+          "section": "multi-head attention",
+          "chunk_id": "1706.03762v7_multi-head attention_0"
+        },
+        {
+          "section": "why self-attention",
+          "chunk_id": "1706.03762v7_why self-attention_2"
+        },
+        {
+          "section": "multi-head attention",
+          "chunk_id": "1706.03762v7_multi-head attention_1"
+        }
+      ],
+      "routing_mode": "qa",
+      "standalone_query": "How long did the training of the model described in 'Attention Is All You Need' take?"
+    }
+  ],
+  "metrics": {
+    "by_difficulty": {
+      "easy": {
+        "n": 8,
+        "pass_rate": 1.0,
+        "refusal_accuracy": 1.0,
+        "false_refusal_rate": 0.0,
+        "hallucination_rate": 0.0,
+        "mean_keyword_score": 1.0,
+        "section_hit_rate": 1.0,
+        "evidence_above_threshold_rate": 1.0,
+        "mean_latency_s": 3.580870137500014
+      },
+      "medium": {
+        "n": 8,
+        "pass_rate": 1.0,
+        "refusal_accuracy": 1.0,
+        "false_refusal_rate": 0.0,
+        "hallucination_rate": 0.0,
+        "mean_keyword_score": 1.0,
+        "section_hit_rate": 1.0,
+        "evidence_above_threshold_rate": 1.0,
+        "mean_latency_s": 4.86985137500001
+      },
+      "hard": {
+        "n": 13,
+        "pass_rate": 1.0,
+        "refusal_accuracy": 0.8461538461538461,
+        "false_refusal_rate": 0.2,
+        "hallucination_rate": 0.0,
+        "mean_keyword_score": 1.0,
+        "section_hit_rate": 1.0,
+        "evidence_above_threshold_rate": 1.0,
+        "mean_latency_s": 4.26852233846155
+      }
+    },
+    "core": {
+      "n": 16,
+      "pass_rate": 1.0,
+      "refusal_accuracy": 1.0,
+      "false_refusal_rate": 0.0,
+      "hallucination_rate": 0.0,
+      "mean_keyword_score": 1.0,
+      "section_hit_rate": 1.0,
+      "evidence_above_threshold_rate": 1.0,
+      "mean_latency_s": 4.225360756250012
+    },
+    "stress_by_tag": {
+      "table": 1.0,
+      "multi-hop": 1.0,
+      "false-premise": 1.0,
+      "near-miss-oos": 1.0,
+      "numeric-reasoning": 1.0,
+      "multi-turn": 1.0
+    },
+    "overall": {
+      "n": 29,
+      "pass_rate": 1.0,
+      "refusal_accuracy": 0.9310344827586207,
+      "false_refusal_rate": 0.08333333333333333,
+      "hallucination_rate": 0.0,
+      "mean_keyword_score": 1.0,
+      "section_hit_rate": 1.0,
+      "evidence_above_threshold_rate": 1.0,
+      "mean_latency_s": 4.24470905172415
+    }
+  }
+}

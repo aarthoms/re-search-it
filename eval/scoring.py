@@ -11,14 +11,23 @@ STRESS_TAGS = ["table", "multi-hop", "false-premise", "near-miss-oos", "numeric-
 
 # Only checked against the first two sentences of an answer (see is_refusal)
 # so a correct answer that ends with a hedge/caveat isn't miscounted as one.
+# Up to two words are allowed between the negation and the verb ("does not
+# EXPLICITLY state"), and the auxiliary covers do/does/did so a plural
+# subject ("they do not specify") is caught, not just "does"/"doesn't".
 REFUSAL_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
-    r"not (mentioned|discussed|covered|stated|provided|reported|specified)",
-    r"does(?:n't| not) (?:discuss|mention|provide|report|include|cover|specify|state)",
+    r"not (?:\w+\s+){0,2}(mentioned|discussed|covered|stated|provided|reported|specified)",
+    r"(?:does|do|did)(?:n't| not) (?:\w+\s+){0,2}(?:discuss|mention|provide|report|include|cover|specify|state)",
     r"couldn't find",
     r"no (?:information|evidence|mention)",
     r"outside the scope",
     r"not in (?:this|the) paper",
 ]]
+
+# A negation anywhere in the same word (contractions) or as a standalone word.
+_NEGATION = re.compile(r"\bnot\b|\bnever\b|\bno\b|\bwithout\b|n't", re.IGNORECASE)
+# Splits a sentence into clauses so a negation in one clause doesn't suppress
+# a forbidden-phrase hit in an unrelated clause of the same sentence.
+_CLAUSE_SPLIT = re.compile(r"\s*(?:,|;|\bthough\b|\bbut\b|\bhowever\b|\balthough\b|\byet\b)\s*", re.IGNORECASE)
 
 
 def _first_two_sentences(text: str) -> str:
@@ -42,10 +51,18 @@ def keyword_score(text: str, groups: list[list[str]]) -> float:
 
 
 def forbidden_hit(text: str, forbidden: list[str] | None) -> bool:
+    """True if a forbidden phrase appears in an AFFIRMATIVE clause -- a
+    forbidden phrase inside its own negation ("does not state that they
+    chose learned positional embeddings") is the model correctly debunking
+    it, not stating it, so that clause is excluded from the check."""
     if not forbidden:
         return False
-    text_lower = text.lower()
-    return any(f.lower() in text_lower for f in forbidden)
+    for sentence in re.split(r"(?<=[.!?])\s+", text):
+        for clause in _CLAUSE_SPLIT.split(sentence):
+            clause_lower = clause.lower()
+            if any(f.lower() in clause_lower for f in forbidden) and not _NEGATION.search(clause_lower):
+                return True
+    return False
 
 
 def section_hit(sources: list[dict], expected: list[str] | None) -> bool | None:
@@ -96,7 +113,6 @@ def _metrics_for(results: list[dict], latencies: dict[str, float] | None = None)
     if not results:
         return {}
     answerable = [r for r in results if r["answerable"]]
-    unanswerable = [r for r in results if not r["answerable"]]
     non_refused_answerable = [r for r in answerable if not r["refused"] and r["keyword_score"] is not None]
     section_checked = [r for r in results if r["section_hit"] is not None]
     grounded_checked = [r for r in answerable if r["grounded"] is not None]
@@ -118,7 +134,10 @@ def _metrics_for(results: list[dict], latencies: dict[str, float] | None = None)
         "hallucination_rate": _mean([1.0 if h else 0.0 for h in hallucinated]),
         "mean_keyword_score": _mean([r["keyword_score"] for r in non_refused_answerable]),
         "section_hit_rate": _mean([1.0 if r["section_hit"] else 0.0 for r in section_checked]),
-        "grounded_rate": _mean([1.0 if r["grounded"] else 0.0 for r in grounded_checked]),
+        # Named for what this actually measures: the pipeline's own
+        # evidence-sufficient/relevance-floor check, not a verified fact
+        # against the source text.
+        "evidence_above_threshold_rate": _mean([1.0 if r["grounded"] else 0.0 for r in grounded_checked]),
     }
     if latencies:
         item_latencies = [latencies[r["id"]] for r in results if r["id"] in latencies]

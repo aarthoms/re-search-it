@@ -267,7 +267,8 @@ def _do_discovery(topic: str, relaxed: bool = False) -> list[dict]:
     result = discover_papers(topic, relaxed=relaxed)
 
     if not result["results"]:
-        print(f"\n  {_c(_WARN, f'No sufficiently relevant papers found for \"{topic}\".')}")
+        no_results_msg = f'No sufficiently relevant papers found for "{topic}".'
+        print(f"\n  {_c(_WARN, no_results_msg)}")
         return []
 
     found_header = f'Found {len(result["results"])} potentially relevant papers on "{topic}":'

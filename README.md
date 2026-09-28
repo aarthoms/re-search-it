@@ -1,7 +1,7 @@
 # re-search-it
 An Autonomous arXiv Paper Digest and QA Agent
 
-Given a research topic, a direct arXiv ID, or a paper title, the agent routes the request to the right operation — discover many papers on a topic, look up and fully process one specific paper, or answer a question about a paper already loaded — searches/reranks candidates, downloads and section-splits the PDF, chunks and embeds it into a local vector store, produces a structured executive briefing, and answers follow-up questions grounded in the paper's actual text, with reasoning-aware retrieval for multi-hop questions and bounded self-learning for unfamiliar terminology.
+Give it a topic, a title, or an arXiv ID. It finds the paper, writes a structured briefing, and answers questions using only the paper's own text — and says so when the paper doesn't cover something. Ask about many papers instead of one, and it switches to discovery mode: a ranked candidate list instead of a single paper.
 
 Built as explicit LangGraph state graphs — not a single monolithic prompt.
 
@@ -15,6 +15,8 @@ pip install -r requirements.txt
 pip install -e .            # registers the `re-search-it` CLI command
 cp .env.example .env        # then fill in your API keys
 ```
+
+Get a free trial key at dashboard.cohere.com and put it in `.env` as `COHERE_API`. Trial keys are rate-limited.
 
 ## Usage
 
@@ -31,6 +33,55 @@ One prompt, three things you can do:
 ```
 
 `new` resets the session, `exit`/`quit` leaves.
+
+## Example run
+
+A text transcript of one real session (built from actual logged pipeline output — the QA excerpts below are real answers from a live `eval/run_eval.py` run, not hand-written; see `eval.md` for the full run these are drawn from). No screenshot/GIF capture is available in this environment, so this is the text version only.
+
+```
+> Attention is all you need
+Found paper:
+  1706.03762  Attention Is All You Need
+  authors: Ashish Vaswani, Noam Shazeer, Niki Parmar et al.
+  https://arxiv.org/pdf/1706.03762v7
+
+Parsed sections (24): preamble, abstract, introduction, background, model
+architecture, encoder and decoder stacks, attention, ..., machine translation,
+model variations, english constituency parsing, conclusion, references
+Chunked & embedded: 41 chunks -> paper_1706_03762v7_v2
+
+--- Executive Briefing ---
+TL;DR: The Transformer, a new neural network architecture based solely on
+attention mechanisms, outperforms recurrent and convolutional models in
+machine translation tasks while being more parallelizable and faster to
+train.
+[approach / key findings / limitations / follow-up questions omitted here —
+saved in full to data/briefings/<arxiv_id>.md]
+
+> Which optimizer did they use for training?
+The authors explicitly state that they used the Adam optimizer with
+specific hyperparameters: β1 = 0.9, β2 = 0.98, and ϵ = 10⁻⁹ (Optimizer).
+Sources: optimizer
+
+> Describe the learning-rate schedule, including the warmup.
+The learning-rate schedule is explicitly described in the [optimizer]
+section. It follows the formula:
+  lrate = d^-0.5 · min(step_num^-0.5, step_num · warmup_steps^-1.5),
+where warmup_steps = 4000. This schedule increases the learning rate
+linearly for the first 4000 steps (warmup phase) and then decreases it
+proportionally to the inverse square root of the step number thereafter.
+Sources: optimizer, training
+
+> What was the model's top-1 accuracy on ImageNet?
+(Low-confidence -- the best evidence I found scored 0.05 relevance, below
+what I'd normally trust.)
+
+The evidence provided does not mention any results or experiments related
+to ImageNet or top-1 accuracy. The paper focuses on machine translation
+tasks, specifically English-to-German and English-to-French, using the
+WMT 2014 dataset, and reports BLEU scores as the evaluation metric.
+(not grounded -- treat this answer with caution)
+```
 
 ## System overview
 
@@ -58,7 +109,7 @@ A citation mention like `Falcon [Almazrouei et al., 2023]` (bracketed, parenthes
 
 ```mermaid
 flowchart TD
-    START(["query"]) --> QU["query_understanding\ndirect ID? exact title? else: LLM decomposes\nquery into 6-10 loose search formulations"]
+    START(["query"]) --> QU["query_understanding\ndirect ID? exact title? else: LLM decomposes\nquery into up to 6 loose search formulations"]
     QU --> AR["arxiv_retrieval\nper formulation: unconstrained search\n+ category-scoped search (additive, never a filter)\ndedupe by arXiv ID"]
 
     AR -->|zero candidates, not yet retried| REC["research_recovery\nmemory lookup -> discovery if miss\nbroadened loose formulations, retry once"]
@@ -165,31 +216,31 @@ No open web search is wired in (no such API is configured for this project) — 
 
 ## Evaluation
 
-`eval/` is a small, live evaluation harness -- it runs the real pipeline (real
+`eval/` is a small, live evaluation harness — it runs the real pipeline (real
 arXiv fetch, real Cohere calls, real Chroma retrieval), not mocks, against a
 fixed question set and reports honest metrics. No numbers are fabricated or
 hand-written; everything in a report comes from what the pipeline actually
 returned.
 
 What's measured, per difficulty tier and overall:
-- `pass_rate` -- keyword-correct (answerable) or clean-refusal (unanswerable)
-- `refusal_accuracy` -- answered when it should, refused when it should
-- `false_refusal_rate` -- refused on questions that WERE answerable
-- `hallucination_rate` -- confidently answered when it shouldn't have, or stated forbidden content
-- `mean_keyword_score` -- fraction of required keyword groups matched, over non-refused answerable items
-- `section_hit_rate` -- retrieved evidence came from an expected section
-- `grounded_rate` -- fraction of answerable items the pipeline itself marked grounded
-- `mean_latency_s` -- wall-clock time per QA turn
+- `pass_rate` — keyword-correct (answerable) or clean-refusal (unanswerable)
+- `refusal_accuracy` — answered when it should, refused when it should
+- `false_refusal_rate` — refused on questions that WERE answerable
+- `hallucination_rate` — confidently answered when it shouldn't have, or stated forbidden content
+- `mean_keyword_score` — fraction of required keyword groups matched, over non-refused answerable items
+- `section_hit_rate` — retrieved evidence came from an expected section
+- `evidence_above_threshold_rate` — fraction of answerable items where retrieval cleared the pipeline's own relevance floor (this is a threshold check, not verified factual grounding against the source text)
+- `mean_latency_s` — wall-clock time per QA turn
 
 Three tiers: `easy` (single stated fact), `medium` (a specific detail or a
-short explanation), and `hard` -- deliberate stress tests (table lookups,
+short explanation), and `hard` — deliberate stress tests (table lookups,
 multi-hop reasoning, false premises, near-miss out-of-scope questions,
 multi-turn pronoun chains). Hard-tier results are reported in their own
 block, separately from `easy`/`medium` ("core"), because some hard-tier
-failures are expected -- they document known limitations, not hide them.
+failures are expected — they document known limitations, not hide them.
 
 Run it with `python -m eval.run_eval` (roughly a handful of Cohere calls per
-question -- routing, planning, rerank/embed, answering -- more for
+question — routing, planning, rerank/embed, answering — more for
 decomposed or multi-round questions). Cohere trial keys are rate-limited, so
 it spaces calls out with `--delay` (default 3.0s) and retries on 429s. See
 `python -m eval.run_eval --help` for filtering by id/difficulty and the
@@ -197,7 +248,23 @@ it spaces calls out with `--delay` (default 3.0s) and retries on 429s. See
 
 Latest results: see [`eval.md`](eval.md) (full tables + analysis) or `eval/results/latest.md` / `latest.csv` (raw).
 
-**Latest run** (2026-09-28, fresh cache, `1706.03762`, 29 items): core (easy+medium) pass rate **1.000** (16/16, all grounded, all correct sections); hard/stress tier **0.769** (10/13) headline, but reading the actual answers behind the 3 failures shows only 1 is a genuine pipeline gap — `h-table-params` (pypdf table garbling, the documented table-extraction limitation) — the other 2 are the scoring harness's own pattern-matching missing a correct negated claim and a plural-subject refusal, not pipeline mistakes. Effective hard-tier accuracy once you read past those scoring artifacts: 12/13. `false_refusal_rate` was 0.000 in every tier — the pipeline never refused something it could actually answer. Full breakdown and per-item reasoning in [`eval.md`](eval.md).
+**Latest run** (2026-09-28, fresh cache, `1706.03762`, 29 items): pass_rate 1.000 in every tier, zero hallucinations, zero forbidden-phrase hits, `routing_ok` 1.000. One hard-tier item (`h-table-params`) is a partial answer that the binary refused/answered scorer credits as a pass rather than the true "half right" it is — documented, not smoothed over, in [`eval.md`](eval.md) along with the rest of the per-item reasoning and the two scorer bugs fixed this round.
+
+## Design Decisions & Tradeoffs
+
+| Decision | Choice | Tradeoff accepted |
+|---|---|---|
+| Orchestration | Explicit LangGraph state graphs (retrieval, QA, each its own compiled graph) instead of one large prompt or a hand-rolled control-flow script | More wiring code and an explicit `PaperState`/typed schema to maintain, in exchange for each stage being independently testable, debuggable, and visualizable — the tradeoff paid off directly: every node in this repo has its own mocked unit test. |
+| Recall vs. precision, kept as separate stages | `query_understanding`/`arxiv_retrieval` optimize purely for recall (several loose formulations, category as additive-only); `selection_ranking` is the only stage that narrows, via rerank against the original query | An extra LLM call and a second pass over candidates, to avoid the actual bug this fixed: one overly-specific multi-concept search phrase returning zero results. |
+| Answerability gating | Two thresholds (`< 0.15` refuse, `0.15–0.3` flag low-confidence, `≥ 0.3` confident) rather than always presenting the top-ranked candidate | Occasionally refuses a borderline-correct match, but the alternative — presenting a 0.03-relevance candidate as "the paper" — is worse for a research tool where being wrong quietly costs more than being cautious out loud. |
+| Chunking | Section-aware, 200-word chunks with 40-word overlap, never spanning two sections; each chunk's section name is prefixed into the text before embedding/reranking (`contextualize()`) | Slightly larger embedding payloads and a small amount of prefix redundancy, for chunks the embedding model can actually attribute to a section instead of guessing from content alone. |
+| Chroma collection versioning | Collection name carries an `INDEX_VERSION` int, bumped whenever chunking/parsing changes | A parser fix silently invalidates every previously-cached collection's *name*, not its content — old collections aren't deleted automatically, just orphaned — in exchange for a paper never silently serving stale chunks from before a bugfix. |
+| Grounding enforcement | `evidence_sufficient` (a relevance-floor check) is enforced in code, not just requested in the prompt — a low-confidence answer gets a disclaimer prepended and is excluded from conversation history | This is a threshold on retrieval relevance, not verified fact-checking of the generated text against the source — a fluent-but-wrong answer built from marginal evidence can still slip through the threshold. Documented, not hidden (see `evidence_above_threshold_rate` in Evaluation). |
+| Chat determinism | `temperature=0.0` on every Cohere chat call (routing, planning, extraction, answering) | Less lexical variety across repeated runs, in exchange for routing/answers that are reproducible enough to eval and debug — a router that classifies the same message differently between runs would be its own bug class. |
+| History handling in `answer_question` | Conversation history is resolved to a standalone, self-contained question by the router *before* retrieval; the answer-generation call itself sees only the current evidence + question, no chat history | If the router's pronoun resolution is wrong, the answer call has no history to fall back on and answers the literal (possibly wrong) standalone query — accepted because letting raw history leak into the answer prompt risked the model treating its own earlier (possibly ungrounded) turn as established fact. |
+| Discovery vs. lookup | Discovery stops at a ranked candidate list; a paper is only fetched/parsed/chunked/embedded once the user explicitly picks one | An extra round-trip for the user ("read paper 2") instead of eagerly indexing every candidate, to avoid burning embed/parse cost on papers nobody reads. |
+| Research memory | New terminology is only persisted after both an LLM self-confidence check AND real arXiv evidence validating it; a discovered term never downgrades existing higher confidence | Slower vocabulary growth — a genuinely rare-but-real term with weak arXiv footprint won't get learned — to avoid seeding shared memory with a plausible-sounding hallucinated term that then quietly corrupts future query expansions. |
+| Evaluation harness | Live (real arXiv/Cohere/Chroma) rather than mocked, small and hand-curated (24 questions + 2 conversations on one paper) with keyword/regex scoring rather than semantic grading or an LLM judge | Costs real API calls and money per run, and the scoring logic itself can (and did — see `eval.md`) produce false negatives on correct answers that phrase a refusal/correction in a way the patterns don't cover. Accepted because a live signal on the real pipeline, even a noisy one, is worth more than a clean signal on a mocked one. |
 
 ## Known limitations
 
@@ -212,7 +279,7 @@ Latest results: see [`eval.md`](eval.md) (full tables + analysis) or `eval/resul
 ## Tech Stack
 
 - **Orchestration:** LangGraph
-- **LLM:** Cohere `command-a-03-2025` (sole provider — `GEMINI_API_KEY` is read in config but nothing calls Gemini; `google-genai` was removed from requirements.txt since it was never imported. No fallback provider is currently implemented)
+- **LLM:** Cohere `command-a-03-2025`
 - **Embeddings/Rerank:** Cohere `embed-english-v3.0`, `rerank-v3.5`
 - **Vector DB:** ChromaDB (local, persisted under `data/chroma/`)
 - **Research memory:** SQLite (local, persisted under `data/research_memory.sqlite`)
@@ -220,4 +287,4 @@ Latest results: see [`eval.md`](eval.md) (full tables + analysis) or `eval/resul
 - **CLI:** colorama for cross-platform ANSI color output
 - **Tests:** pytest
 
-See `memory.md` for the running design-decision history.
+See `DESIGN.md` for the running design-decision history.

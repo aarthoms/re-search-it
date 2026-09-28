@@ -41,6 +41,28 @@ def test_forbidden_hit_absent():
     assert forbidden_hit("no relevant numbers here", ["28.4"]) is False
 
 
+def test_forbidden_hit_not_triggered_by_the_phrase_inside_its_own_negation():
+    # Regression: the live eval run flagged this as forbidden_hit=True even
+    # though the model correctly debunked the false premise -- the forbidden
+    # substring appeared inside the negation itself.
+    text = ("The evidence does not explicitly state that the authors chose "
+            "learned positional embeddings for their final model.")
+    assert forbidden_hit(text, ["they chose learned", "chose learned positional"]) is False
+
+
+def test_is_refusal_true_for_plural_subject_do_not_phrasing():
+    # Regression: the live eval run missed this refusal because the original
+    # pattern only matched "does not"/"doesn't", not "do not" (plural
+    # subject), and required the negation word directly adjacent to the verb.
+    answer = {
+        "text": "The evidence does not explicitly state the amount of GPU memory each P100 had. "
+                "The excerpts mention 8 NVIDIA P100 GPUs but they do not specify the GPU memory capacity.",
+        "grounded": False,
+        "sources": [],
+    }
+    assert is_refusal(answer) is True
+
+
 def test_false_premise_item_passes_when_it_corrects_the_premise():
     item = {
         "id": "h-false-premise-learned", "difficulty": "hard", "answerable": True,

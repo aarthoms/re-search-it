@@ -4,7 +4,6 @@ history-free answer calls, and deterministic (temperature=0) chat calls."""
 from unittest.mock import patch
 
 from re_search_it.nodes import chunk_embed as chunk_embed_module
-from re_search_it.nodes import fetch_parse as fetch_parse_module
 from re_search_it.nodes import retrieve_chunks as retrieve_chunks_module
 from re_search_it.nodes.chunk_embed import chunk_embed
 from re_search_it.nodes.fetch_parse import _collection_id
