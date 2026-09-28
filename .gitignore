@@ -150,6 +150,11 @@ activemq-data/
 # Local persisted data (ChromaDB, etc.)
 data/
 
+# Eval harness results (timestamped runs), except the latest summary
+eval/results/*
+!eval/results/latest.md
+!eval/results/latest.csv
+
 # Environments
 .env
 .envrc

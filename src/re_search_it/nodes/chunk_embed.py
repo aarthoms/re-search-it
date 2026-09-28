@@ -12,7 +12,7 @@ disk. Skip straight to reporting the existing chunk count instead.
 """
 
 from re_search_it.state import PaperState
-from re_search_it.tools.chunker import chunk_sections
+from re_search_it.tools.chunker import chunk_sections, contextualize
 from re_search_it.tools.cohere_client import embed
 from re_search_it.tools.vector_store import add_chunks, collection_chunk_count
 
@@ -34,7 +34,12 @@ def chunk_embed(state: PaperState) -> PaperState:
     if not chunks:
         return {**state, "error": f"No text to chunk for {arxiv_id}"}
 
-    vectors = embed([c["text"] for c in chunks], input_type="search_document")
+    # Embed with the section name in context (the model otherwise has no
+    # signal for which part of the paper a fragment came from), but store
+    # the RAW text as the Chroma document so neighbor expansion, answer
+    # evidence, and displayed text don't carry a duplicated "[section]"
+    # prefix -- section is already in the metadata.
+    vectors = embed([contextualize(c["section"], c["text"]) for c in chunks], input_type="search_document")
 
     ids = [f"{arxiv_id}_{c['section']}_{c['chunk_index']}" for c in chunks]
     documents = [c["text"] for c in chunks]

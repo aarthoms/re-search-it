@@ -13,6 +13,7 @@ import re
 
 from re_search_it.state import PaperState
 from re_search_it.tools.arxiv_client import download_pdf
+from re_search_it.tools.chunker import INDEX_VERSION
 from re_search_it.tools.pdf_parser import is_structure_degraded, parse_pdf
 from re_search_it.tools.reference_parser import parse_references
 from re_search_it.tools.vector_store import get_or_create_collection
@@ -21,8 +22,10 @@ _SAFE_CHARS = re.compile(r"[^a-zA-Z0-9_-]")
 
 
 def _collection_id(arxiv_id: str) -> str:
-    """arXiv IDs contain '.' which ChromaDB collection names disallow."""
-    return "paper_" + _SAFE_CHARS.sub("_", arxiv_id)
+    """arXiv IDs contain '.' which ChromaDB collection names disallow. The
+    version suffix means a paper indexed by an older parser/chunker gets a
+    fresh collection automatically instead of reusing stale chunks."""
+    return f"paper_{_SAFE_CHARS.sub('_', arxiv_id)}_v{INDEX_VERSION}"
 
 
 def fetch_parse(state: PaperState) -> PaperState:

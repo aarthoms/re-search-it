@@ -3,6 +3,18 @@
 CHUNK_SIZE_WORDS = 200
 CHUNK_OVERLAP_WORDS = 40
 
+# Bump whenever parsing, chunking, or the embedding input format changes --
+# folded into the Chroma collection name so a paper indexed by an older
+# version gets a fresh collection instead of reusing stale chunks.
+INDEX_VERSION = 2
+
+
+def contextualize(section: str, text: str) -> str:
+    """Prefix a chunk with its section name for embedding/reranking -- the
+    embedding and rerank calls must see the exact same context, so this is
+    the one place that format is built."""
+    return f"[{section}] {text}"
+
 
 def chunk_sections(
     sections: dict[str, str],

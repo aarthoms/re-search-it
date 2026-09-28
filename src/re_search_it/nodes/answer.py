@@ -36,7 +36,7 @@ def answer(state: PaperState) -> PaperState:
         text = "I couldn't find anything in this paper relevant to that question."
         sources = []
     else:
-        text = answer_question(question, evidence, history)
+        text = answer_question(question, evidence)
         sources = [{"section": c["section"], "chunk_id": c["id"]} for c in evidence]
         if not grounded:
             # Code-enforced, not prompt-only: the prompt already asks the

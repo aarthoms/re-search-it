@@ -11,6 +11,7 @@ so a refinement round adds evidence rather than replacing it.
 """
 
 from re_search_it.state import PaperState
+from re_search_it.tools.chunker import contextualize
 from re_search_it.tools.cohere_client import embed, rerank
 from re_search_it.tools.vector_store import get_chunks_by_ids, query_chunks
 
@@ -100,7 +101,11 @@ def retrieve_chunks(state: PaperState) -> PaperState:
     if not candidate_list:
         return {**state, "retrieved_chunks": [], "evidence_sufficient": False}
 
-    ranked = rerank(state["question"], [c["text"] for c in candidate_list], top_n=final_top_n)
+    # Rerank on the same [section]-prefixed text the embedding saw -- chunks
+    # passed on to the answer node keep their raw text (candidate_list is
+    # unmodified).
+    contextualized = [contextualize(c["section"], c["text"]) for c in candidate_list]
+    ranked = rerank(state["question"], contextualized, top_n=final_top_n)
     retrieved_chunks = []
     for i, r in enumerate(ranked):
         chunk = candidate_list[r["index"]]

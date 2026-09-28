@@ -10,6 +10,9 @@ from re_search_it.config import COHERE_API_KEY
 from re_search_it.schemas import Briefing, ConceptDiscovery, DiscoveryFilters, QueryExpansion, RetrievalPlan, TopLevelIntent
 
 CHAT_MODEL = "command-a-03-2025"
+# All chat calls in this file are extraction, planning, routing,
+# summarizing, or answering -- none benefit from randomness.
+CHAT_TEMPERATURE = 0.0
 RERANK_MODEL = "rerank-v3.5"
 EMBED_MODEL = "embed-english-v3.0"
 EMBED_BATCH_SIZE = 96
@@ -84,6 +87,7 @@ def expand_query(query: str, known_concepts: list[dict] | None = None) -> dict:
 
     response = _client.chat(
         model=CHAT_MODEL,
+        temperature=CHAT_TEMPERATURE,
         messages=[{"role": "user", "content": prompt}],
         response_format={"type": "json_object"},
     )
@@ -202,6 +206,7 @@ def summarize_paper(title: str, authors: list[str], sections_text: str) -> Brief
     for _ in range(MAX_SUMMARIZE_RETRIES):
         response = _client.chat(
             model=CHAT_MODEL,
+            temperature=CHAT_TEMPERATURE,
             messages=messages,
             response_format={"type": "json_object"},
         )
@@ -253,6 +258,7 @@ def plan_retrieval(question: str, available_sections: list[str]) -> RetrievalPla
     """Decide direct-vs-decomposed retrieval and which sections to prioritize."""
     response = _client.chat(
         model=CHAT_MODEL,
+        temperature=CHAT_TEMPERATURE,
         messages=[
             {
                 "role": "user",
@@ -289,6 +295,7 @@ def refine_query(question: str, evidence_so_far: list[str]) -> str:
     evidence_text = "\n---\n".join(evidence_so_far) or "(nothing relevant found yet)"
     response = _client.chat(
         model=CHAT_MODEL,
+        temperature=CHAT_TEMPERATURE,
         messages=[
             {
                 "role": "user",
@@ -333,18 +340,24 @@ Evidence:
 Question: {question}"""
 
 
-def answer_question(question: str, evidence_chunks: list[dict], history: list[dict]) -> str:
-    """Generate a grounded answer from reranked evidence chunks + conversation history."""
+def answer_question(question: str, evidence_chunks: list[dict]) -> str:
+    """Generate a grounded answer from reranked evidence chunks.
+
+    Only the evidence + question go to the model -- pronoun/follow-up
+    resolution already happened upstream (the router's standalone_query),
+    so the answer should rely on retrieved evidence, not accumulated chat
+    history.
+    """
     evidence_text = "\n---\n".join(
         f"[{c['section']}] {c['text']}" for c in evidence_chunks
     )
-    messages = list(history) + [
+    messages = [
         {
             "role": "user",
             "content": _ANSWER_PROMPT.format(evidence=evidence_text, question=question),
         }
     ]
-    response = _client.chat(model=CHAT_MODEL, messages=messages)
+    response = _client.chat(model=CHAT_MODEL, messages=messages, temperature=CHAT_TEMPERATURE)
     return response.message.content[0].text.strip()
 
 
@@ -449,6 +462,7 @@ def route_top_level(
 
     response = _client.chat(
         model=CHAT_MODEL,
+        temperature=CHAT_TEMPERATURE,
         messages=[
             {
                 "role": "user",
@@ -514,6 +528,7 @@ def extract_discovery_filters(query: str) -> DiscoveryFilters:
     loose multi-formulation search."""
     response = _client.chat(
         model=CHAT_MODEL,
+        temperature=CHAT_TEMPERATURE,
         messages=[
             {
                 "role": "user",
@@ -559,6 +574,7 @@ def generate_discovery_queries(topic: str) -> list[str]:
     search formulations for broad recall."""
     response = _client.chat(
         model=CHAT_MODEL,
+        temperature=CHAT_TEMPERATURE,
         messages=[{"role": "user", "content": _DISCOVERY_EXPAND_PROMPT.format(topic=topic)}],
     )
     text = response.message.content[0].text.strip()
@@ -585,6 +601,7 @@ def describe_relations(topic: str, papers: list[dict]) -> list[str]:
     )
     response = _client.chat(
         model=CHAT_MODEL,
+        temperature=CHAT_TEMPERATURE,
         messages=[
             {"role": "user", "content": _RELATION_PROMPT.format(topic=topic, papers=papers_text)}
         ],
@@ -628,6 +645,7 @@ def discover_terminology(term: str, query: str) -> ConceptDiscovery | None:
     """
     response = _client.chat(
         model=CHAT_MODEL,
+        temperature=CHAT_TEMPERATURE,
         messages=[{"role": "user", "content": _DISCOVERY_PROMPT.format(term=term, query=query)}],
         response_format={"type": "json_object"},
     )
@@ -671,6 +689,7 @@ def generate_recovery_queries(query: str, concept: dict | None = None) -> list[s
 
     response = _client.chat(
         model=CHAT_MODEL,
+        temperature=CHAT_TEMPERATURE,
         messages=[
             {
                 "role": "user",
