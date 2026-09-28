@@ -47,7 +47,17 @@ def _expand_with_neighbors(chunk: dict, arxiv_id: str, collection_id: str) -> di
     200-word fragment that may cut off mid-thought. Chunk IDs are
     deterministic (f"{arxiv_id}_{section}_{chunk_index}"), so neighbors can
     be looked up directly by ID rather than another similarity search.
+
+    Idempotent: a chunk from an EARLIER retrieval round can survive into a
+    later one (retrieved_chunks carries forward across refine_query rounds,
+    and this function's own output becomes next round's input), so without
+    the `expanded` check an already-widened chunk re-selected in round 2
+    would get expanded a second time on top of its already-merged text --
+    duplicating the neighbor content in what the model reads.
     """
+    if chunk.get("expanded"):
+        return chunk
+
     section, idx = chunk["section"], chunk["chunk_index"]
     neighbor_ids = [f"{arxiv_id}_{section}_{idx - 1}", f"{arxiv_id}_{section}_{idx + 1}"]
     fetched = get_chunks_by_ids(collection_id, neighbor_ids)
@@ -57,7 +67,7 @@ def _expand_with_neighbors(chunk: dict, arxiv_id: str, collection_id: str) -> di
     after = by_index.get(idx + 1, "")
     expanded_text = " ".join(t for t in (before, chunk["text"], after) if t)
 
-    return {**chunk, "text": expanded_text}
+    return {**chunk, "text": expanded_text, "expanded": True}
 
 
 def retrieve_chunks(state: PaperState) -> PaperState:

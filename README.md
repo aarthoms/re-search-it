@@ -177,7 +177,7 @@ No open web search is wired in (no such API is configured for this project) — 
 ## Tech Stack
 
 - **Orchestration:** LangGraph
-- **LLM:** Cohere `command-a-03-2025` (sole provider — `google-genai`/`GEMINI_API_KEY` are present in requirements/config but not yet wired into any request path; a Gemini fallback is not currently implemented)
+- **LLM:** Cohere `command-a-03-2025` (sole provider — `GEMINI_API_KEY` is read in config but nothing calls Gemini; `google-genai` was removed from requirements.txt since it was never imported. No fallback provider is currently implemented)
 - **Embeddings/Rerank:** Cohere `embed-english-v3.0`, `rerank-v3.5`
 - **Vector DB:** ChromaDB (local, persisted under `data/chroma/`)
 - **Research memory:** SQLite (local, persisted under `data/research_memory.sqlite`)

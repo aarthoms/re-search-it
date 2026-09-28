@@ -53,7 +53,25 @@ _INLINE_ABSTRACT_PATTERN = re.compile(r"^\s*abstract\b\s*[:.\-—]+\s*(\S.*)$", 
 # starting with a capital letter and NOT ending in a full stop (an ordinary
 # sentence that happens to start with a number, e.g. "3 kernels were
 # tested...", almost always ends with one; a heading almost never does).
-_GENERIC_NUMBERED_HEADING = re.compile(r"^\s*\d+(?:\.\d+)*\.?\s+([A-Z][A-Za-z0-9 ,\-:&']{0,79})$")
+#
+# Three constraints keep this from over-matching (found live: "2024 IEEE
+# Conference", "10 Python 3", "Apple M2 Max" were all being accepted as
+# headings, which both pollutes section_hints with junk names and can mask
+# a genuinely bad split from is_structure_degraded by spreading text across
+# many fake sections):
+#   - leading number capped at 1-19 (papers rarely have 20+ top-level
+#     sections; this alone rejects any 4-digit year like "2024")
+#   - heading text capped at 8 words
+#   - no word in the heading text may itself contain a digit (rejects
+#     "10 Python 3" and "Apple M2 Max" alike)
+# This still won't catch every false positive (an affiliation footnote like
+# "1 Department of Finance, University of Texas" is genuinely
+# indistinguishable from "1 Introduction" by this heuristic alone) -- a
+# known, accepted residual limitation, not a claim of perfect detection.
+_GENERIC_NUMBERED_HEADING = re.compile(
+    r"^\s*(?:[1-9]|1[0-9])(?:\.\d+)*\.?\s+"
+    r"([A-Z][A-Za-z,&':\-]*(?:\s+[A-Za-z,&':\-]+){0,7})$"
+)
 
 
 def _match_heading(line: str) -> str | None:
